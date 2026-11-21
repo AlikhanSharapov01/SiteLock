@@ -8,9 +8,13 @@ final class Daemon {
     static let tickInterval: DispatchTimeInterval = .seconds(2)
 
     private let queue = DispatchQueue(label: "sitelockd")
+    /// Client I/O runs here, so a slow or stuck client never blocks the timer on `queue`.
+    private let ioQueue = DispatchQueue(label: "sitelockd.io", attributes: .concurrent)
     private let enforcers: [Enforcer]
     private var state = BlockState()
     private var password: PasswordRecord?
+    /// auth.json exists but could not be read: never offer first-launch setup (it would overwrite it).
+    private var passwordUnreadable = false
     private var throttle = AuthThrottle()
     private var timer: DispatchSourceTimer?
     private var listener: DispatchSourceRead?
@@ -22,16 +26,16 @@ final class Daemon {
     func start() throws {
         try Storage.ensureDataDirectory()
         do { password = try Storage.load(PasswordRecord.self, from: Paths.passwordFile) }
-        catch { log("cannot read password file: \(error)") }
+        catch { log("cannot read password file: \(error)"); passwordUnreadable = true }
         do { state = try Storage.load(BlockState.self, from: Paths.stateFile) ?? BlockState() }
         catch { log("cannot read state file, starting with an empty list: \(error)") }
 
         let fd = try UnixSocket.listen(path: Paths.socket, mode: 0o666)
-        let listener = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
+        let listener = DispatchSource.makeReadSource(fileDescriptor: fd, queue: ioQueue)
         listener.setEventHandler { [weak self] in
             let client = accept(fd, nil, nil)
             guard client >= 0 else { return }
-            self?.serve(client)
+            self?.ioQueue.async { self?.serve(client) }
         }
         self.listener = listener
 
@@ -68,12 +72,14 @@ final class Daemon {
 
     // MARK: - Requests
 
+    /// Runs on `ioQueue`; only `handle` touches state, on `queue`.
     private func serve(_ fd: Int32) {
         defer { close(fd) }
-        UnixSocket.setTimeouts(fd, 5)
+        UnixSocket.setTimeouts(fd, 2)
         let response: Response
-        if let line = UnixSocket.readLine(fd), let request = try? Wire.decode(Request.self, from: line) {
-            response = handle(request)
+        if let line = UnixSocket.readLine(fd, deadline: Date().addingTimeInterval(5)),
+           let request = try? Wire.decode(Request.self, from: line) {
+            response = queue.sync { handle(request) }
         } else {
             response = .failure("Malformed request")
         }
@@ -83,7 +89,7 @@ final class Daemon {
     func handle(_ request: Request) -> Response {
         switch request.command {
         case .hello:
-            return Response(ok: true, initialized: password != nil)
+            return Response(ok: true, initialized: password != nil || passwordUnreadable)
         case .setup:
             return setup(request.password ?? "")
         default:
@@ -116,7 +122,7 @@ final class Daemon {
     }
 
     private func setup(_ newPassword: String) -> Response {
-        guard password == nil else { return .failure("A password is already set") }
+        guard password == nil, !passwordUnreadable else { return .failure("A password is already set") }
         do {
             let record = try PasswordHasher.makeRecord(password: newPassword)
             try Storage.save(record, to: Paths.passwordFile)
@@ -130,7 +136,9 @@ final class Daemon {
 
     /// Nil on success, otherwise a message for the user.
     private func authenticate(_ candidate: String?) -> String? {
-        guard let record = password else { return "No password set yet" }
+        guard let record = password else {
+            return passwordUnreadable ? "The password file cannot be read; see /var/log/sitelockd.log" : "No password set yet"
+        }
         if let wait = throttle.lockedFor(now: Date()) {
             return "Too many wrong passwords. Try again in \(Int(wait.rounded(.up))) s"
         }

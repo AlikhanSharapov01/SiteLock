@@ -45,7 +45,7 @@ final class FirefoxEnforcer: Enforcer {
     private func write(_ policy: FirefoxPolicy) {
         // Write through cfprefsd so its cache and the file agree.
         for (key, value) in policy.values {
-            CFPreferencesSetValue(key as CFString, value as CFPropertyList, domain, kCFPreferencesAnyUser, kCFPreferencesAnyHost)
+            CFPreferencesSetValue(key as CFString, value as AnyObject, domain, kCFPreferencesAnyUser, kCFPreferencesAnyHost)
         }
         if !CFPreferencesSynchronize(domain, kCFPreferencesAnyUser, kCFPreferencesAnyHost) {
             log("CFPreferencesSynchronize failed")

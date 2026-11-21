@@ -249,30 +249,34 @@ struct CustomUnblockSheet: View {
     @Environment(\.dismiss) private var dismiss
     let domain: String
     let onConfirm: (Int) -> Void
-    @State private var minutes = 10
+    @State private var text = "10"
+
+    private var minutes: Int? {
+        Int(text.trimmingCharacters(in: .whitespaces)).flatMap {
+            (1...BlockState.maxUnblockMinutes).contains($0) ? $0 : nil
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Unblock \(domain)")
                 .font(.headline)
-            Stepper(value: $minutes, in: 1...BlockState.maxUnblockMinutes) {
-                HStack {
-                    TextField("Minutes", value: $minutes, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 70)
-                    Text("minutes")
-                }
+            HStack {
+                TextField("Minutes", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 70)
+                Text("minutes (1–\(BlockState.maxUnblockMinutes))")
             }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Unblock") {
-                    onConfirm(minutes)
+                    if let minutes { onConfirm(minutes) }
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!(1...BlockState.maxUnblockMinutes).contains(minutes))
+                .disabled(minutes == nil)
             }
         }
         .padding()

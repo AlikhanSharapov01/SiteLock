@@ -24,7 +24,12 @@ if [[ ! -x build/sitelockd || ! -d build/SiteLock.app ]]; then
 fi
 
 # Replace a previous version (keeps the password and the list).
-launchctl bootout "system/$LABEL" 2>/dev/null || true
+if launchctl bootout "system/$LABEL" 2>/dev/null; then
+  for _ in $(seq 1 20); do
+    launchctl print "system/$LABEL" >/dev/null 2>&1 || break
+    sleep 0.25
+  done
+fi
 rm -f "$SOCKET"
 
 install -d -o root -g wheel -m 755 /Library/PrivilegedHelperTools

@@ -24,4 +24,4 @@ jobs:
           lipo build/SiteLock.app/Contents/MacOS/SiteLock -verify_arch arm64 x86_64
           codesign --verify --verbose build/sitelockd build/SiteLock.app
       - name: Shell scripts parse
-        run: bash -n install.sh uninstall.sh scripts/build.sh
+        run: for f in install.sh uninstall.sh scripts/build.sh; do bash -n "$f"; done

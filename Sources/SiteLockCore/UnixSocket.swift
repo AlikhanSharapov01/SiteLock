@@ -56,11 +56,12 @@ public enum UnixSocket {
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
     }
 
-    /// Reads up to and excluding the first "\n". Nil on EOF/timeout/oversize.
-    public static func readLine(_ fd: Int32) -> Data? {
+    /// Reads up to and excluding the first "\n". Nil on EOF, timeout, oversize or when `deadline`
+    /// passes (a total limit, so a client trickling bytes cannot hold the connection open).
+    public static func readLine(_ fd: Int32, deadline: Date = .distantFuture) -> Data? {
         var data = Data()
         var buf = [UInt8](repeating: 0, count: 4096)
-        while data.count <= Wire.maxMessageBytes {
+        while data.count <= Wire.maxMessageBytes && Date() < deadline {
             let n = read(fd, &buf, buf.count)
             guard n > 0 else { return nil }
             data.append(contentsOf: buf[0..<n])

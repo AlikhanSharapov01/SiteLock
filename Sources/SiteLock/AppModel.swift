@@ -91,6 +91,7 @@ final class AppModel: ObservableObject {
 
     /// Runs a request, showing failures in `error`. Nil when it failed.
     private func perform(_ request: Request) async -> Response? {
+        guard !busy else { return nil } // e.g. Return fired both onSubmit and the default button
         busy = true
         error = nil
         defer { busy = false }

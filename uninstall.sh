@@ -17,7 +17,7 @@ if [[ -f "$DATA/auth.json" ]]; then
     echo "$HELPER is missing, so the password cannot be checked. Nothing was removed." >&2
     exit 1
   fi
-  read -r -s -p "SiteLock password: " PASSWORD
+  IFS= read -r -s -p "SiteLock password: " PASSWORD
   echo
   if ! printf '%s\n' "$PASSWORD" | "$HELPER" verify-password; then
     echo "Wrong password. Nothing was removed." >&2

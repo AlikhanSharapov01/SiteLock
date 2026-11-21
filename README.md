@@ -172,6 +172,8 @@ only inside a user's GUI session, so that enforcer would run in a per-user Launc
   do not read `org.mozilla.firefox` (for example LibreWolf) are not affected either.
 - **Changes need a Firefox restart.** SiteLock quits Firefox (SIGTERM, then SIGKILL after 10 s if
   it hangs) whenever the blocked set changes. Unsaved form input in open tabs can be lost.
+- **Lockout is global.** After 5 wrong passwords from anyone, the app refuses all passwords
+  for 60 seconds, yours included.
 - **First-launch race.** Until a password is set, any local user who opens the app first can set
   it. Set it right after installing.
 - **Other policy sources.** A configuration profile (`/Library/Managed Preferences`) outranks
