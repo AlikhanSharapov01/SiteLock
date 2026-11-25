@@ -5,4 +5,9 @@ build/
 xcuserdata/
 DerivedData/
 .DS_Store
+# Local tooling and notes, kept out of the repository
+.claude/
+CLAUDE.md
+AGENTS.md
 HANDOFF.md
+scripts/make-icon.py
