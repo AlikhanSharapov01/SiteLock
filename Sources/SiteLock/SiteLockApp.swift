@@ -97,7 +97,7 @@ struct MenuBarContent: View {
     private var statusLine: String {
         if model.serviceOutdated { return "Update the background service in SiteLock" }
         guard let status = model.status else {
-            "SiteLock is not installed"
+            return "SiteLock is not installed"
         }
         if !model.reachable { return "SiteLock is not reachable" }
         guard status.initialized else { return "Set a password in SiteLock" }
