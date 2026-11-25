@@ -6,6 +6,7 @@ import SiteLockCore
 final class ChromiumEnforcer: Enforcer {
     private let browser: Browser
     private let path: String
+    private let writeFailure = FailureLog()
 
     var bundleID: String { browser.id }
 
@@ -25,8 +26,7 @@ final class ChromiumEnforcer: Enforcer {
             write(policy)
         }
         // Chromium reads policies at startup (and on its own schedule), so restart it on a change.
-        if changed, BrowserProcess.quit(processName: browser.processName) { return [browser.id] }
-        return []
+        return changed ? [browser.id] : []
     }
 
     /// Removes the keys SiteLock manages, and the file if nothing else is in it.
@@ -48,6 +48,10 @@ final class ChromiumEnforcer: Enforcer {
 
     private func write(_ policy: ChromiumPolicy) {
         var merged = readFile() ?? [:]
+        if merged.isEmpty, FileManager.default.fileExists(atPath: path) {
+            // Unparseable (or empty): we own URLBlocklist and a corrupt file is unusable, so replace it.
+            writeFailure.failed("\(path) is unreadable; replacing it")
+        }
         for (key, value) in policy.values { merged[key] = value }
         save(merged)
     }
@@ -63,8 +67,9 @@ final class ChromiumEnforcer: Enforcer {
             let data = try PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0)
             try data.write(to: URL(fileURLWithPath: path), options: .atomic)
             try fm.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0, .groupOwnerAccountID: 0], ofItemAtPath: path)
+            writeFailure.succeeded()
         } catch {
-            log("writing \(path) failed: \(error)")
+            writeFailure.failed("writing \(path) failed: \(error)")
         }
     }
 }

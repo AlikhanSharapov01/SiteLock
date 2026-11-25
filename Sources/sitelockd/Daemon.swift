@@ -63,14 +63,21 @@ final class Daemon {
     }
 
     /// Applies the state in every browser (or only `bundleID`). Returns the bundle ids of the
-    /// browsers that were quit.
+    /// browsers that were quit, all of them in one pass.
     @discardableResult
     private func enforce(now: Date, changed: Bool, only bundleID: String? = nil) -> [String] {
-        var quit: [String] = []
+        var toQuit: [String] = []
         for enforcer in enforcers where bundleID == nil || enforcer.bundleID == bundleID {
-            quit += enforcer.enforce(state, now: now, changed: changed)
+            toQuit += enforcer.enforce(state, now: now, changed: changed)
         }
-        return quit
+        return quit(toQuit)
+    }
+
+    /// Quits the given browsers together; returns the bundle ids that were running.
+    private func quit(_ bundleIDs: [String]) -> [String] {
+        let browsers = bundleIDs.compactMap { Browser.byID($0) }
+        let names = Set(BrowserProcess.quit(processNames: browsers.map(\.processName)))
+        return browsers.filter { names.contains($0.processName) }.map(\.id)
     }
 
     private func persist(_ s: BlockState) {
@@ -127,12 +134,12 @@ final class Daemon {
         }
         let changed = next.effectiveBlocked(now: now) != state.effectiveBlocked(now: now)
         state = next
-        var quit: [String] = []
+        var quitIDs: [String] = []
         if changed {
             log("\(request.command.rawValue) \(request.domain ?? ""): applying new list")
-            quit = enforce(now: now, changed: true)
+            quitIDs = enforce(now: now, changed: true)
         }
-        return Response(ok: true, state: state, quitBrowsers: quit)
+        return Response(ok: true, state: state, quitBrowsers: quitIDs)
     }
 
     /// The caller is authenticated. Turns enforcement in one browser on or off and restarts that
@@ -149,14 +156,14 @@ final class Daemon {
         guard next != state else { return Response(ok: true, state: state, quitBrowsers: []) }
         state = next
         log("\(id): enforcement \(request.enabled == true ? "on" : "off")")
-        var quit: [String] = []
+        var quitIDs: [String] = []
         if request.enabled == true {
-            quit = enforce(now: now, changed: true, only: id)
+            quitIDs = enforce(now: now, changed: true, only: id)
         } else {
             enforce(now: now, changed: false, only: id)
-            if let browser = Browser.byID(id), BrowserProcess.quit(processName: browser.processName) { quit = [id] }
+            quitIDs = quit([id])
         }
-        return Response(ok: true, state: state, quitBrowsers: quit)
+        return Response(ok: true, state: state, quitBrowsers: quitIDs)
     }
 
     private func setup(_ newPassword: String) -> Response {

@@ -43,3 +43,16 @@ enum Storage {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
     }
 }
+
+/// Logs a failure when it first happens or when its message changes, not on every tick.
+final class FailureLog {
+    private var last: String?
+
+    func failed(_ message: String) {
+        guard message != last else { return }
+        last = message
+        log(message)
+    }
+
+    func succeeded() { last = nil }
+}

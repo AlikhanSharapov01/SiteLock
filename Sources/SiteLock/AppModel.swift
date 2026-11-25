@@ -259,6 +259,7 @@ final class AppModel: ObservableObject {
     }
 
     private func send(_ request: Request) async throws -> Response {
-        try await Task.detached { try UnixSocket.send(request) }.value
+        // Changes may wait while the daemon quits browsers (up to 10 s).
+        try await Task.detached { try UnixSocket.send(request, timeout: 60) }.value
     }
 }
