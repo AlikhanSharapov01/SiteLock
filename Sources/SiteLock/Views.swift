@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SiteLockCore
 
@@ -21,6 +22,16 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { await model.connect() }
+    }
+}
+
+/// The app's own icon (Resources/AppIcon.icns), so the windows are recognisably SiteLock.
+struct AppIconView: View {
+    var body: some View {
+        Image(nsImage: NSApplication.shared.applicationIconImage)
+            .resizable()
+            .frame(width: 64, height: 64)
+            .accessibilityHidden(true)
     }
 }
 
@@ -69,8 +80,11 @@ struct SetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Set your SiteLock password")
-                .font(.title2)
+            HStack(spacing: 12) {
+                AppIconView()
+                Text("Set your SiteLock password")
+                    .font(.title2)
+            }
             Text("Use a new password, not your Mac login password. You will need it to change the blocklist, unblock a site or uninstall SiteLock. At least \(PasswordHasher.minimumLength) characters.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -98,9 +112,7 @@ struct UnlockView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "lock")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
+            AppIconView()
             Text("Enter your SiteLock password")
                 .font(.title2)
             SecureField("Password", text: $password)
