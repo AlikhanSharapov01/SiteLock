@@ -15,12 +15,15 @@ public struct Request: Codable, Equatable, Sendable {
         case hello      // -> initialized flag, no auth
         case setup      // first launch: set the password (only while none is stored)
         case list       // -> domains + unblocks
+        case edit           // rename `domain` to `newDomain`
         case add, remove, unblock, reblock
     }
 
     public var command: Command
     public var password: String?
     public var domain: String?
+    /// Only for `edit`: the replacement for `domain`.
+    public var newDomain: String? = nil
     public var minutes: Int?
 
     public init(_ command: Command, password: String? = nil, domain: String? = nil, minutes: Int? = nil) {

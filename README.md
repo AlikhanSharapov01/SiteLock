@@ -68,6 +68,10 @@ Firefox**, and the app reopens it if it was running. When a temporary unblock ex
 service quits Firefox without reopening it, so the site is blocked from the next launch. To get
 your tabs back, set Firefox → Settings → General → *Open previous windows and tabs*.
 
+**Editing an entry.** The pencil button on a row changes that entry, for example
+`youtube.com` → `www.youtube.com`. The new value is checked like a new entry (valid host, not
+already in the list), and the edited entry starts blocked: a running temporary unblock ends.
+
 ## Uninstall
 
 ```bash

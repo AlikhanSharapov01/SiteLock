@@ -128,6 +128,7 @@ struct BlocklistView: View {
     @EnvironmentObject private var model: AppModel
     @State private var newDomain = ""
     @State private var customUnblockDomain: String?
+    @State private var editDomain: String?
     @State private var removeDomain: String?
 
     var body: some View {
@@ -156,6 +157,7 @@ struct BlocklistView: View {
                                   onUnblock: { minutes in Task { await model.unblock(domain, minutes: minutes) } },
                                   onCustomUnblock: { customUnblockDomain = domain },
                                   onReblock: { Task { await model.reblock(domain) } },
+                                  onEdit: { editDomain = domain },
                                   onRemove: { removeDomain = domain })
                     }
                     .listStyle(.bordered(alternatesRowBackgrounds: true))
@@ -173,6 +175,10 @@ struct BlocklistView: View {
         }
         .padding()
         .disabled(model.busy)
+        .sheet(item: Binding(get: { editDomain.map(IdentifiedDomain.init) },
+                             set: { editDomain = $0?.id })) { item in
+            EditDomainSheet(domain: item.id)
+        }
         .sheet(item: Binding(get: { customUnblockDomain.map(IdentifiedDomain.init) },
                              set: { customUnblockDomain = $0?.id })) { item in
             CustomUnblockSheet(domain: item.id) { minutes in
@@ -206,6 +212,7 @@ struct DomainRow: View {
     let onUnblock: (Int) -> Void
     let onCustomUnblock: () -> Void
     let onReblock: () -> Void
+    let onEdit: () -> Void
     let onRemove: () -> Void
 
     var body: some View {
@@ -235,6 +242,11 @@ struct DomainRow: View {
                 }
                 .fixedSize()
             }
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.borderless)
+            .help("Edit \(domain)")
             Button(action: onRemove) {
                 Image(systemName: "trash")
             }
@@ -242,6 +254,51 @@ struct DomainRow: View {
             .help("Remove \(domain)")
         }
         .padding(.vertical, 2)
+    }
+}
+
+struct EditDomainSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let domain: String
+    @State private var text = ""
+
+    private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Edit \(domain)")
+                .font(.headline)
+            TextField("example.com", text: $text)
+                .textFieldStyle(.roundedBorder)
+            Text("The new entry blocks that host and its subdomains. A temporary unblock of \(domain) ends.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ErrorText(message: model.error)
+            HStack {
+                Spacer()
+                if model.busy { ProgressView().controlSize(.small) }
+                Button("Cancel", role: .cancel) {
+                    model.error = nil
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    Task {
+                        if await model.edit(domain, to: trimmed) { dismiss() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(model.busy || trimmed.isEmpty || trimmed.lowercased() == domain)
+            }
+        }
+        .padding()
+        .frame(width: 340)
+        .onAppear {
+            text = domain
+            model.error = nil
+        }
     }
 }
 
