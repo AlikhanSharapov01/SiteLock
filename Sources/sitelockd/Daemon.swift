@@ -89,13 +89,16 @@ final class Daemon {
     func handle(_ request: Request) -> Response {
         switch request.command {
         case .hello:
-            return Response(ok: true, initialized: password != nil || passwordUnreadable)
+            var response = Response(ok: true, initialized: password != nil || passwordUnreadable)
+            response.version = SiteLockVersion.current
+            return response
         case .setup:
             return setup(request.password ?? "")
         default:
             break
         }
         if let error = authenticate(request.password) { return .failure(error) }
+        if request.command == .uninstall { return beginUninstall() }
         if request.command == .changePassword { return changePassword(request.newPassword ?? "") }
 
         let now = Date()
@@ -103,7 +106,7 @@ final class Daemon {
         do {
             let domain = { try Domain.normalize(request.domain ?? "") }
             switch request.command {
-            case .list, .hello, .setup, .changePassword: break
+            case .list, .hello, .setup, .changePassword, .uninstall: break
             case .add: try next.add(domain())
             case .remove: try next.remove(domain())
             case .unblock: try next.unblock(domain(), minutes: request.minutes ?? 0, now: now)
@@ -134,6 +137,20 @@ final class Daemon {
         } catch {
             return .failure("\(error)")
         }
+    }
+
+    /// The caller is authenticated. Answers first, then stops enforcing, removes everything
+    /// (Installer.removeFiles) and unloads this LaunchDaemon, which ends this process.
+    private func beginUninstall() -> Response {
+        log("uninstall requested from the app")
+        queue.asyncAfter(deadline: .now() + 0.5) { [self] in
+            timer?.cancel()
+            listener?.cancel()
+            Installer.removeFiles()
+            runTool("/bin/launchctl", ["bootout", "system/\(Paths.launchDaemonLabel)"])
+            exit(0)
+        }
+        return Response(ok: true)
     }
 
     /// The caller is already authenticated with the current password.

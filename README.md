@@ -26,13 +26,16 @@ git clone https://github.com/AlikhanSharapov01/SiteLock.git
 cd SiteLock
 ./scripts/build.sh                     # as your normal user; builds ./build/SiteLock.app
 ditto build/SiteLock.app /Applications/SiteLock.app
-sudo /Applications/SiteLock.app/Contents/MacOS/sitelockd install   # one time; admin password
 ```
 
-Then open **SiteLock** and set your SiteLock password. To update, replace the app and run the
-same `sitelockd install` again; the password and the list are kept.
+Open **SiteLock** → **Install** (macOS asks for your administrator password once) → set your
+SiteLock password. To update, replace the app and open it: it shows **Update** when the
+installed service is a different version; the password and the list are kept.
 
-SiteLock.app carries everything; `sitelockd install` puts only these on the system:
+Without the app's button, the same works in Terminal:
+`sudo /Applications/SiteLock.app/Contents/MacOS/sitelockd install`.
+
+SiteLock.app carries everything; installing puts only these on the system:
 
 | What | Where |
 |---|---|
@@ -87,11 +90,14 @@ already in the list), and the edited entry starts blocked: a running temporary u
 
 ## Uninstall
 
+In the app, unlock it and choose **SiteLock → Uninstall SiteLock…** in the menu bar. Or in
+Terminal (also works if the app is already deleted):
+
 ```bash
 sudo /Library/PrivilegedHelperTools/sitelockd uninstall
 ```
 
-It asks for your SiteLock password and removes nothing if it is wrong. It removes the service and
+Both need your SiteLock password and remove nothing if it is wrong. It removes the service and
 the stored data, and deletes the keys SiteLock set in
 `/Library/Preferences/org.mozilla.firefox.plist` (`EnterprisePoliciesEnabled`, `WebsiteFilter`,
 `BlockAboutConfig`). If you had other Firefox policies in that file, set
@@ -233,9 +239,12 @@ Run after installing. Expected results in *italics*.
 16. Wrong password in the app 5 times. *"Too many wrong passwords…" for 60 seconds.*
 17. Remove instagram.com. *Firefox restarts; instagram.com loads.*
 18. Update Firefox (Firefox → About Firefox) if an update is available. *Blocking still works.*
-19. `sudo /Library/PrivilegedHelperTools/sitelockd uninstall` with a wrong password.
+19. Replace the app with a build of another version and open it. *An Update banner appears;
+    Update asks for the admin password, then the app connects again.*
+    `sudo /Library/PrivilegedHelperTools/sitelockd uninstall` with a wrong password.
     *"wrong password; nothing was removed".*
-20. The same with the right password, restart Firefox. *Sites load; `about:policies`
+20. In the app: SiteLock → Uninstall SiteLock… (or the command above with the right password),
+    restart Firefox. *The app shows "SiteLock was removed"; sites load; `about:policies`
     shows no active policies (unless you have others).*
 
 ## Development

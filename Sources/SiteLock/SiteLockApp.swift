@@ -1,4 +1,5 @@
 import AppKit
+import SiteLockCore
 import SwiftUI
 
 @main
@@ -13,6 +14,12 @@ struct SiteLockApp: App {
                 .frame(width: 440, height: 520)
         }
         .windowResizability(.contentSize)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Uninstall SiteLock…") { model.confirmingUninstall = true }
+                    .disabled(model.screen != .unlocked)
+            }
+        }
     }
 }
 
