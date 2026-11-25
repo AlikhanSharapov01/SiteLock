@@ -124,7 +124,14 @@ extension Daemon {
     /// Root, or a member of the `admin` group.
     static func isAdmin(uid: uid_t) -> Bool {
         if uid == 0 { return true }
-        guard let pw = getpwuid(uid), let name = pw.pointee.pw_name else { return false }
+        // getpwuid is not thread-safe and this runs on a concurrent queue.
+        var pwd = passwd()
+        var result: UnsafeMutablePointer<passwd>?
+        let size = max(sysconf(_SC_GETPW_R_SIZE_MAX), 4096)
+        var buffer = [CChar](repeating: 0, count: size)
+        guard getpwuid_r(uid, &pwd, &buffer, size, &result) == 0, result != nil, let name = pwd.pw_name else {
+            return false
+        }
         let output = runToolOutput("/usr/bin/dsmemberutil",
                                    ["checkmembership", "-U", String(cString: name), "-G", "admin"])
         return output?.contains("user is a member of the group") ?? false

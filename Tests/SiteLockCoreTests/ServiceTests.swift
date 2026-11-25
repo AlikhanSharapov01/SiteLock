@@ -131,6 +131,16 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(h.savedPasswords.count, 1)
     }
 
+    func testNonAdminCanUseOtherCommandsWithThePassword() {
+        let h = Harness()
+        let other = Client(uid: 502, isAdmin: false)
+        let added = h.service.handle(Request(.add, password: pw, domain: "a.com"), from: other, now: t0)
+        XCTAssertEqual(added.state?.domains, ["a.com"])
+        XCTAssertTrue(h.service.handle(Request(.changePassword, password: pw, newPassword: "newsecret"),
+                                       from: other, now: t0).ok)
+        XCTAssertEqual(h.savedPasswords.count, 1)
+    }
+
     func testLockoutIsPerUid() {
         let h = Harness()
         let a = Client(uid: 501, isAdmin: false), b = Client(uid: 502, isAdmin: false)
