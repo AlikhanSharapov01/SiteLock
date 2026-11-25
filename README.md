@@ -61,7 +61,9 @@ built `SiteLock.app` from somewhere else (download, AirDrop) and macOS says it "
 3. **Unblock for a while**: on the row, choose *Unblock* → 5/15/30/60/120 minutes or *Custom…*
    (1 minute to 24 hours). The row shows *Unblocked until 14:35*. *Re-block now* ends it early.
 4. **Remove**: the trash button (asks for confirmation).
-5. **Lock** or close the window. Closing the window quits the app; blocking continues.
+5. **Change Password…**: enter the current password and the new one twice. The new password is
+   hashed the same way and replaces the old hash; wrong current passwords count toward the lockout.
+6. **Lock** or close the window. Closing the window quits the app; blocking continues.
 
 Firefox reads its policies only when it starts. So every change to what is blocked **quits
 Firefox**, and the app reopens it if it was running. When a temporary unblock expires, the
@@ -174,6 +176,9 @@ only inside a user's GUI session, so that enforcer would run in a per-user Launc
   it hangs) whenever the blocked set changes. Unsaved form input in open tabs can be lost.
 - **Lockout is global.** After 5 wrong passwords from anyone, the app refuses all passwords
   for 60 seconds, yours included.
+- **Forgotten password.** There is no recovery inside SiteLock. An admin can delete
+  `/Library/Application Support/SiteLock/auth.json` (`sudo rm …`) and restart the service
+  (`sudo launchctl kickstart -k system/local.sitelock.daemon`); the app then asks for a new password.
 - **First-launch race.** Until a password is set, any local user who opens the app first can set
   it. Set it right after installing.
 - **Other policy sources.** A configuration profile (`/Library/Managed Preferences`) outranks

@@ -48,6 +48,16 @@ final class AppModel: ObservableObject {
         screen = .unlocked
     }
 
+    /// True when the daemon accepted the new password.
+    func changePassword(current: String, new newPassword: String, confirmation: String) async -> Bool {
+        guard newPassword == confirmation else { error = "The new passwords do not match"; return false }
+        guard await perform(Request(.changePassword, password: current, newPassword: newPassword)) != nil else {
+            return false
+        }
+        password = newPassword
+        return true
+    }
+
     func lock() {
         password = ""
         state = BlockState()
