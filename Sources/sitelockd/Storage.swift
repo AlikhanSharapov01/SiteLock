@@ -30,6 +30,25 @@ func runTool(_ tool: String, _ args: [String]) -> Int32 {
     return p.terminationStatus
 }
 
+/// Runs a command-line tool and returns its standard output (nil if it could not start or did
+/// not finish within `timeout` seconds; it is then terminated).
+func runToolOutput(_ tool: String, _ args: [String], timeout: TimeInterval = 5) -> String? {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: tool)
+    p.arguments = args
+    let pipe = Pipe()
+    p.standardOutput = pipe
+    p.standardError = FileHandle.nullDevice
+    do { try p.run() } catch { log("\(tool) failed: \(error)"); return nil }
+    let killer = DispatchWorkItem { if p.isRunning { p.terminate() } }
+    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    killer.cancel()
+    if p.terminationReason == .uncaughtSignal { log("\(tool) timed out"); return nil }
+    return String(decoding: data, as: UTF8.self)
+}
+
 /// JSON files under /Library/Application Support/SiteLock (root:wheel, dir 0700, files 0600).
 enum Storage {
     static func ensureDataDirectory() throws {

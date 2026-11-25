@@ -48,18 +48,19 @@ private final class Harness {
 final class ServiceTests: XCTestCase {
     let t0 = Date(timeIntervalSince1970: 1_700_000_000)
     let pw = "secret1"
+    let admin = Client(uid: 501, isAdmin: true)
     let chrome = "com.google.Chrome"
 
     private func send(_ h: Harness, _ command: Request.Command, domain: String? = nil, minutes: Int? = nil,
                       password: String? = "secret1", now: Date? = nil) -> Response {
-        h.service.handle(Request(command, password: password, domain: domain, minutes: minutes), now: now ?? t0)
+        h.service.handle(Request(command, password: password, domain: domain, minutes: minutes), from: admin, now: now ?? t0)
     }
 
     private func setBrowser(_ h: Harness, _ id: String, enabled: Bool) -> Response {
         var request = Request(.setBrowser, password: pw)
         request.browser = id
         request.enabled = enabled
-        return h.service.handle(request, now: t0)
+        return h.service.handle(request, from: admin, now: t0)
     }
 
     func testHelloBeforeAndAfterSetup() {
@@ -118,6 +119,52 @@ final class ServiceTests: XCTestCase {
         XCTAssertTrue(send(h, .list, now: t0.addingTimeInterval(61)).ok)
     }
 
+    func testSetupNeedsAnAdministrator() {
+        let h = Harness(password: nil)
+        let other = Client(uid: 502, isAdmin: false)
+        let refused = h.service.handle(Request(.setup, password: "secret1"), from: other, now: t0)
+        XCTAssertEqual(refused.error, "Only an administrator of this Mac can set the SiteLock password.")
+        XCTAssertTrue(h.savedPasswords.isEmpty)
+        XCTAssertFalse(h.service.hasPassword)
+        XCTAssertEqual(h.service.handle(Request(.hello), from: other, now: t0).initialized, false)
+        XCTAssertTrue(h.service.handle(Request(.setup, password: "secret1"), from: admin, now: t0).ok)
+        XCTAssertEqual(h.savedPasswords.count, 1)
+    }
+
+    func testNonAdminCanUseOtherCommandsWithThePassword() {
+        let h = Harness()
+        let other = Client(uid: 502, isAdmin: false)
+        let added = h.service.handle(Request(.add, password: pw, domain: "a.com"), from: other, now: t0)
+        XCTAssertEqual(added.state?.domains, ["a.com"])
+        XCTAssertTrue(h.service.handle(Request(.changePassword, password: pw, newPassword: "newsecret"),
+                                       from: other, now: t0).ok)
+        XCTAssertEqual(h.savedPasswords.count, 1)
+    }
+
+    func testLockoutIsPerUid() {
+        let h = Harness()
+        let a = Client(uid: 501, isAdmin: false), b = Client(uid: 502, isAdmin: false)
+        for _ in 0..<5 { _ = h.service.handle(Request(.list, password: "bad"), from: a, now: t0) }
+        XCTAssertEqual(h.service.handle(Request(.list, password: pw), from: a, now: t0).error,
+                       "Too many wrong passwords. Try again in 60 s")
+        XCTAssertTrue(h.service.handle(Request(.list, password: pw), from: b, now: t0).ok)
+    }
+
+    func testWrongPasswordUninstallDoesNotUninstall() {
+        let h = Harness()
+        XCTAssertEqual(send(h, .uninstall, password: "nope").error, "Wrong password")
+        XCTAssertEqual(h.uninstalls, 0)
+    }
+
+    func testTickWithNothingExpiredDoesNotSave() {
+        let h = Harness(state: BlockState(domains: ["a.com"]))
+        h.service.tick(now: t0)
+        h.service.tick(now: t0.addingTimeInterval(2))
+        XCTAssertTrue(h.savedStates.isEmpty)
+        XCTAssertEqual(h.enforceCalls.count, 2)
+        XCTAssertFalse(h.enforceCalls[0].changed)
+    }
+
     func testAddEditRemoveChangeStatePersistAndEnforce() {
         let h = Harness()
         let added = send(h, .add, domain: "https://YouTube.com/watch")
@@ -130,7 +177,7 @@ final class ServiceTests: XCTestCase {
 
         var editRequest = Request(.edit, password: pw, domain: "youtube.com")
         editRequest.newDomain = "x.com"
-        let edit = h.service.handle(editRequest, now: t0)
+        let edit = h.service.handle(editRequest, from: admin, now: t0)
         XCTAssertEqual(edit.state?.domains, ["x.com"])
         XCTAssertEqual(h.savedStates.last?.domains, ["x.com"])
         XCTAssertEqual(h.enforceCalls.count, 2)
@@ -222,13 +269,13 @@ final class ServiceTests: XCTestCase {
 
     func testChangePasswordReplacesThePassword() {
         let h = Harness()
-        let changed = h.service.handle(Request(.changePassword, password: pw, newPassword: "newsecret"), now: t0)
+        let changed = h.service.handle(Request(.changePassword, password: pw, newPassword: "newsecret"), from: admin, now: t0)
         XCTAssertTrue(changed.ok)
         XCTAssertEqual(h.savedPasswords.count, 1)
         XCTAssertEqual(send(h, .list).error, "Wrong password")
         XCTAssertTrue(send(h, .list, password: "newsecret").ok)
 
-        let short = h.service.handle(Request(.changePassword, password: "newsecret", newPassword: "x"), now: t0)
+        let short = h.service.handle(Request(.changePassword, password: "newsecret", newPassword: "x"), from: admin, now: t0)
         XCTAssertFalse(short.ok)
         XCTAssertTrue(send(h, .list, password: "newsecret").ok)
     }
@@ -236,7 +283,7 @@ final class ServiceTests: XCTestCase {
     func testFailingPasswordSaveKeepsOldPassword() {
         let h = Harness()
         h.failSaves = true
-        let response = h.service.handle(Request(.changePassword, password: pw, newPassword: "newsecret"), now: t0)
+        let response = h.service.handle(Request(.changePassword, password: pw, newPassword: "newsecret"), from: admin, now: t0)
         XCTAssertFalse(response.ok)
         h.failSaves = false
         XCTAssertTrue(send(h, .list).ok)
