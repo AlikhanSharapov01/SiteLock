@@ -26,11 +26,8 @@ struct ContentView: View {
         .safeAreaInset(edge: .top) {
             if model.updateAvailable && model.screen != .removed { UpdateBanner() }
         }
-        .confirmationDialog("Uninstall SiteLock?", isPresented: $model.confirmingUninstall) {
-            Button("Uninstall", role: .destructive) { Task { await model.uninstall() } }
-        } message: {
-            Text("This removes the background service, the blocklist and your SiteLock password. Firefox stops blocking after it restarts.")
-        }
+        .sheet(isPresented: $model.showingUninstall) { UninstallSheet() }
+        .sheet(isPresented: $model.showingUpdates) { UpdatesSheet() }
         .task { await model.connect() }
     }
 }
@@ -50,6 +47,86 @@ struct UpdateBanner: View {
         }
         .padding(10)
         .background(Color.accentColor.opacity(0.12))
+    }
+}
+
+struct UninstallSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var password = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Uninstall SiteLock")
+                .font(.headline)
+            Text("Removes the background service, the blocklist and your SiteLock password. Firefox stops blocking after it restarts.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            SecureField("SiteLock password", text: $password)
+                .textFieldStyle(.roundedBorder)
+            ErrorText(message: model.error)
+            HStack {
+                Spacer()
+                if model.busy { ProgressView().controlSize(.small) }
+                Button("Cancel", role: .cancel) {
+                    model.error = nil
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                Button("Uninstall", role: .destructive) {
+                    Task { if await model.uninstall(password: password) { dismiss() } }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(model.busy || password.isEmpty)
+            }
+        }
+        .padding()
+        .frame(width: 340)
+        .onAppear { model.error = nil }
+    }
+}
+
+struct UpdatesSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Software Update")
+                .font(.headline)
+            switch model.updateCheck {
+            case .idle, .checking:
+                HStack { ProgressView().controlSize(.small); Text("Checking for updates…") }
+            case .upToDate:
+                Text("SiteLock \(SiteLockVersion.current) is the latest version.")
+            case .available(let version):
+                Text("SiteLock \(version) is available. You have \(SiteLockVersion.current).")
+                Text("SiteLock downloads it, replaces this app and reopens. Then click Update to update the background service.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .installing:
+                HStack { ProgressView().controlSize(.small); Text("Downloading and installing…") }
+            case .failed(let message):
+                ErrorText(message: message)
+            }
+            HStack {
+                Spacer()
+                if case .failed = model.updateCheck {
+                    Button("Try Again") { Task { await model.checkForUpdates() } }
+                }
+                Button("Close") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(model.updateCheck == .installing)
+                if case .available = model.updateCheck {
+                    Button("Download and Install") { Task { await model.installUpdate() } }
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding()
+        .frame(width: 360)
+        .task { await model.checkForUpdates() }
     }
 }
 
@@ -173,6 +250,13 @@ struct UnlockView: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(model.busy || password.isEmpty)
             }
+            HStack(spacing: 16) {
+                Button("Check for Updates…") { model.showingUpdates = true }
+                Button("Uninstall SiteLock…") { model.showingUninstall = true }
+            }
+            .buttonStyle(.link)
+            .font(.callout)
+            .padding(.top, 8)
         }
         .padding()
     }
@@ -231,7 +315,17 @@ struct BlocklistView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 if model.busy { ProgressView().controlSize(.small) }
-                Button("Change Password…") { changingPassword = true }
+                Menu {
+                    Button("Check for Updates…") { model.showingUpdates = true }
+                    Button("Change Password…") { changingPassword = true }
+                    Divider()
+                    Button("Uninstall SiteLock…") { model.showingUninstall = true }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More")
                 Button("Lock") { model.lock() }
             }
         }

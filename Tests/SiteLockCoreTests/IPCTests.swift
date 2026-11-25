@@ -29,4 +29,14 @@ final class VersionTests: XCTestCase {
         let info = try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as? [String: Any])
         XCTAssertEqual(info["CFBundleShortVersionString"] as? String, SiteLockVersion.current)
     }
+
+    func testVersionComparison() {
+        XCTAssertTrue(SiteLockVersion.isNewer("1.2.0", than: "1.1.0"))
+        XCTAssertTrue(SiteLockVersion.isNewer("v1.10.0", than: "1.9.9"), "numeric, not text, and a leading v is ignored")
+        XCTAssertTrue(SiteLockVersion.isNewer("2.0", than: "1.99.99"))
+        XCTAssertTrue(SiteLockVersion.isNewer("1.2.1", than: "1.2"))
+        XCTAssertFalse(SiteLockVersion.isNewer("1.2.0", than: "1.2.0"))
+        XCTAssertFalse(SiteLockVersion.isNewer("1.2", than: "1.2.0"))
+        XCTAssertFalse(SiteLockVersion.isNewer("1.1.9", than: "1.2.0"))
+    }
 }

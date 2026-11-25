@@ -16,8 +16,8 @@ struct SiteLockApp: App {
         .windowResizability(.contentSize)
         .commands {
             CommandGroup(after: .appInfo) {
-                Button("Uninstall SiteLock…") { model.confirmingUninstall = true }
-                    .disabled(model.screen != .unlocked)
+                Button("Check for Updates…") { model.showingUpdates = true }
+                Button("Uninstall SiteLock…") { model.showingUninstall = true }
             }
         }
     }

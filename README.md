@@ -9,7 +9,7 @@ curl -fsSL https://github.com/AlikhanSharapov01/SiteLock/releases/latest/downloa
 ```
 
 Then click **Install** in the app and set your SiteLock password.
-The same command updates SiteLock.
+Updates: **Check for Updates…** in the app (or run the command again).
 
 ## Use
 
@@ -19,7 +19,7 @@ The same command updates SiteLock.
 
 ## Uninstall
 
-Menu **SiteLock → Uninstall SiteLock…**, or:
+**Uninstall SiteLock…** in the app (needs your SiteLock password), or:
 
 ```bash
 sudo /Library/PrivilegedHelperTools/sitelockd uninstall

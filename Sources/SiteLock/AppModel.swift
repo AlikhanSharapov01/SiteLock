@@ -22,7 +22,18 @@ final class AppModel: ObservableObject {
     /// Version of the running service when it differs from this app's (nil: same, or unknown).
     @Published var installedVersion: String?
     @Published var updateAvailable = false
-    @Published var confirmingUninstall = false
+    @Published var showingUninstall = false
+    @Published var showingUpdates = false
+    @Published var updateCheck: UpdateCheck = .idle
+
+    enum UpdateCheck: Equatable {
+        case idle, checking, upToDate, installing
+        case available(String)
+        case failed(String)
+    }
+
+    static let latestReleaseAPI = URL(string: "https://api.github.com/repos/AlikhanSharapov01/SiteLock/releases/latest")!
+    static let latestDownload = URL(string: "https://github.com/AlikhanSharapov01/SiteLock/releases/latest/download/SiteLock.zip")!
 
     /// Kept in memory only while unlocked; every daemon request is authenticated with it.
     private var password = ""
@@ -87,12 +98,82 @@ final class AppModel: ObservableObject {
     }
 
     /// Removes SiteLock from this Mac (service, Firefox policy keys, password, list).
-    func uninstall() async {
-        guard await perform(Request(.uninstall, password: password)) != nil else { return }
+    /// True when the daemon accepted the SiteLock password and is removing itself.
+    func uninstall(password candidate: String) async -> Bool {
+        guard await perform(Request(.uninstall, password: candidate)) != nil else { return false }
         password = ""
         state = BlockState()
         updateAvailable = false
         screen = .removed
+        return true
+    }
+
+    /// Asks GitHub for the latest release and compares it with this app's version.
+    func checkForUpdates() async {
+        updateCheck = .checking
+        struct Release: Decodable { let tag_name: String }
+        do {
+            var request = URLRequest(url: Self.latestReleaseAPI)
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw UpdateError("GitHub did not answer") }
+            let tag = try JSONDecoder().decode(Release.self, from: data).tag_name
+            let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+            updateCheck = SiteLockVersion.isNewer(latest, than: SiteLockVersion.current) ? .available(latest) : .upToDate
+        } catch {
+            updateCheck = .failed("Could not check for updates: \(error)")
+        }
+    }
+
+    /// Downloads the latest SiteLock.zip, swaps it in for this app (the old copy goes to the
+    /// Trash) and relaunches. The relaunched app then offers to update the background service.
+    func installUpdate() async {
+        updateCheck = .installing
+        do {
+            let fm = FileManager.default
+            let (zip, response) = try await URLSession.shared.download(from: Self.latestDownload)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw UpdateError("download failed") }
+            let work = fm.temporaryDirectory.appendingPathComponent("SiteLockUpdate-\(UUID().uuidString)")
+            try fm.createDirectory(at: work, withIntermediateDirectories: true)
+            guard await Self.run("/usr/bin/ditto", ["-x", "-k", zip.path, work.path]) == 0 else {
+                throw UpdateError("could not unpack the download")
+            }
+            let newApp = work.appendingPathComponent("SiteLock.app")
+            guard fm.isExecutableFile(atPath: newApp.appendingPathComponent("Contents/MacOS/SiteLock").path) else {
+                throw UpdateError("the download does not contain SiteLock.app")
+            }
+            let current = Bundle.main.bundleURL
+            do {
+                try fm.trashItem(at: current, resultingItemURL: nil)
+            } catch {
+                throw UpdateError("cannot replace \(current.path); move SiteLock to Applications and try again")
+            }
+            try fm.moveItem(at: newApp, to: current)
+            // Reopen the new copy once this process has quit.
+            let relaunch = Process()
+            relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
+            relaunch.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", current.path]
+            try relaunch.run()
+            NSApplication.shared.terminate(nil)
+        } catch {
+            updateCheck = .failed("Update failed: \(error)")
+        }
+    }
+
+    private struct UpdateError: Error, CustomStringConvertible {
+        let description: String
+        init(_ description: String) { self.description = description }
+    }
+
+    private static func run(_ tool: String, _ args: [String]) async -> Int32 {
+        await Task.detached {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: tool)
+            p.arguments = args
+            do { try p.run() } catch { return -1 }
+            p.waitUntilExit()
+            return p.terminationStatus
+        }.value
     }
 
     func lock() {
