@@ -217,6 +217,9 @@ Run after `sudo ./install.sh`. Expected results in *italics*.
 
 ## Development
 
+The app icon is drawn by `scripts/make-icon.py` (Pillow) into `Resources/AppIcon.icns`; the build
+only copies the committed `.icns`. Re-run the script after changing the drawing.
+
 ```bash
 swift test                  # unit tests (macOS)
 ./scripts/build.sh          # universal release build + lipo -info
