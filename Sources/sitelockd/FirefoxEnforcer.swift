@@ -40,6 +40,7 @@ final class FirefoxEnforcer: Enforcer {
         for key in FirefoxPolicy.managedKeys { current[key] = nil }
         if current.isEmpty {
             try? FileManager.default.removeItem(atPath: FirefoxPolicy.plistPath)
+            reloadPreferencesCache()
         } else {
             saveFile(current)
         }
@@ -52,6 +53,7 @@ final class FirefoxEnforcer: Enforcer {
             try FileManager.default.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0, .groupOwnerAccountID: 0],
                                                   ofItemAtPath: FirefoxPolicy.plistPath)
             writeFailure.succeeded()
+            reloadPreferencesCache()
         } catch {
             writeFailure.failed("writing \(FirefoxPolicy.plistPath) failed: \(error)")
         }

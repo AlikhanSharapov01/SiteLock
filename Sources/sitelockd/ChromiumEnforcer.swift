@@ -36,6 +36,7 @@ final class ChromiumEnforcer: Enforcer {
         for key in ChromiumPolicy.managedKeys { current[key] = nil }
         if current.isEmpty {
             try? FileManager.default.removeItem(atPath: path)
+            reloadPreferencesCache()
         } else {
             save(current)
         }
@@ -68,6 +69,7 @@ final class ChromiumEnforcer: Enforcer {
             try data.write(to: URL(fileURLWithPath: path), options: .atomic)
             try fm.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0, .groupOwnerAccountID: 0], ofItemAtPath: path)
             writeFailure.succeeded()
+            reloadPreferencesCache()
         } catch {
             writeFailure.failed("writing \(path) failed: \(error)")
         }
