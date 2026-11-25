@@ -1,14 +1,19 @@
 name: macOS build and test
 
-# Manual trigger (Actions tab -> "Run workflow") and pull requests only, to save macOS minutes.
+# Manual trigger (Actions tab -> "Run workflow"), pull requests, and version tags (v1.2.3),
+# which also publish SiteLock.zip as a GitHub release. No runs on plain pushes, to save minutes.
 on:
   workflow_dispatch:
   pull_request:
+  push:
+    tags: ["v*"]
 
 jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 30
+    permissions:
+      contents: write # only used by the release step
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
@@ -29,3 +34,13 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" build/SiteLock.app/Contents/Info.plist
       - name: Build script parses
         run: bash -n scripts/build.sh
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/SiteLock.app/Contents/Info.plist)
+          test "${GITHUB_REF_NAME#v}" = "$VERSION" || { echo "tag $GITHUB_REF_NAME does not match app version $VERSION"; exit 1; }
+          ditto -c -k --keepParent build/SiteLock.app SiteLock.zip
+          gh release create "$GITHUB_REF_NAME" SiteLock.zip --title "SiteLock $VERSION" \
+            --notes "Universal (Apple silicon + Intel), macOS 13 or later. Install: see README."

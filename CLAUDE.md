@@ -15,7 +15,7 @@ Universal binaries (arm64 + x86_64), ad-hoc signed.
 - Build (universal `build/SiteLock.app`, daemon inside at `Contents/MacOS/sitelockd`): `./scripts/build.sh` (as the normal user, never sudo)
 - Test: `swift test`
 - Test the core on Linux: `docker run --rm -v "$PWD":/src -w /src swift:6.0-noble swift test --build-path /tmp/b`
-- CI: `.github/workflows/macos.yml` (manual `workflow_dispatch` + pull requests)
+- CI: `.github/workflows/macos.yml` (manual `workflow_dispatch`, pull requests, `v*` tags → GitHub release with `SiteLock.zip`)
 - Install / uninstall: `sudo …/sitelockd install`, `sudo /Library/PrivilegedHelperTools/sitelockd uninstall` — the user runs these, never an agent
 
 ## Layout
