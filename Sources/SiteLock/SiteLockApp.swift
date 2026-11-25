@@ -15,6 +15,12 @@ struct SiteLockApp: App {
         }
         .windowResizability(.contentSize)
         .commands {
+            CommandGroup(after: .importExport) {
+                Button("Import List…") { Task { await model.importList() } }
+                    .disabled(model.screen != .unlocked || model.busy)
+                Button("Export List…") { model.exportList() }
+                    .disabled(model.screen != .unlocked)
+            }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { model.showingUpdates = true }
                 Button("Uninstall SiteLock…") { model.showingUninstall = true }

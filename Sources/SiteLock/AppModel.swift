@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SiteLockCore
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -17,6 +18,8 @@ final class AppModel: ObservableObject {
     @Published var state = BlockState()
     @Published var error: String?
     @Published var busy = false
+    /// Result of the last import, shown under the list until the next action.
+    @Published var importSummary: String?
     /// Version of the running service when it differs from this app's (nil: same, or unknown).
     @Published var installedVersion: String?
     @Published var updateAvailable = false
@@ -182,6 +185,7 @@ final class AppModel: ObservableObject {
         password = ""
         state = BlockState()
         error = nil
+        importSummary = nil
         screen = .locked
     }
 
@@ -215,6 +219,43 @@ final class AppModel: ObservableObject {
         _ = await change(request)
     }
 
+    /// Asks for a .txt file and adds its entries in one change.
+    func importList() async {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a text file with one site per line"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importSummary = nil
+        let text: String
+        do { text = try String(contentsOf: url, encoding: .utf8) } catch {
+            self.error = "Could not read \(url.lastPathComponent) as UTF-8 text"
+            return
+        }
+        let entries = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+        guard entries.reduce(0, { $0 + $1.utf8.count + 4 }) < Wire.maxMessageBytes - 1024 else {
+            self.error = "That file is too large to import"
+            return
+        }
+        var request = Request(.importDomains, password: password)
+        request.domains = entries
+        _ = await change(request)
+    }
+
+    /// Saves the loaded list as a text file, one host per line.
+    func exportList() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "SiteLock blocklist.txt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let text = (["# SiteLock blocklist"] + state.domains.sorted()).joined(separator: "\n") + "\n"
+        do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
+            self.error = "Could not save the list: \(error.localizedDescription)"
+        }
+    }
+
     /// Browsers installed on this Mac, plus enabled ones that are gone (so they can be turned off).
     var installedBrowsers: [Browser] {
         Browser.catalog.filter { browser in
@@ -232,6 +273,13 @@ final class AppModel: ObservableObject {
         }
         guard let response = await perform(request) else { return false }
         if let newState = response.state { state = newState }
+        if let report = response.importReport {
+            importSummary = report.summary
+            if report.invalid > 0 {
+                error = "Not valid: " + report.invalidEntries.joined(separator: ", ")
+                    + (report.invalid > report.invalidEntries.count ? " …" : "")
+            }
+        }
         let quit = response.quitBrowsers ?? []
         await relaunch(bundleIDs: quit.filter { wasRunning.contains($0) })
         return true

@@ -292,6 +292,11 @@ struct BlocklistView: View {
                     .disabled(model.busy || newDomain.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             ErrorText(message: model.error)
+            if let summary = model.importSummary {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             if model.state.domains.isEmpty {
                 Text("No blocked sites yet. A site blocks its subdomains too: youtube.com also blocks music.youtube.com, while www.youtube.com blocks only YouTube itself.")
@@ -332,6 +337,8 @@ struct BlocklistView: View {
                 Menu {
                     Button("Check for Updates…") { model.showingUpdates = true }
                     Button("Browsers…") { choosingBrowsers = true }
+                    Button("Import List…") { Task { await model.importList() } }
+                    Button("Export List…") { model.exportList() }
                     Button("Change Password…") { changingPassword = true }
                     Divider()
                     Button("Uninstall SiteLock…") { model.showingUninstall = true }

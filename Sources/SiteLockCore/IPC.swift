@@ -44,6 +44,7 @@ public struct Request: Codable, Equatable, Sendable {
         case uninstall      // remove the service, policy keys and data (asked from the app)
         case changePassword // `password` is the current one, `newPassword` replaces it
         case setBrowser     // turn enforcement in `browser` (bundle id) on or off (`enabled`)
+        case importDomains  // add the raw entries in `domains` in one change
     }
 
     public var command: Command
@@ -54,6 +55,8 @@ public struct Request: Codable, Equatable, Sendable {
     /// Only for `setBrowser`.
     public var browser: String? = nil
     public var enabled: Bool? = nil
+    /// Only for `importDomains`: raw lines of an exported list.
+    public var domains: [String]? = nil
     public var minutes: Int?
     public var newPassword: String?
 
@@ -77,6 +80,8 @@ public struct Response: Codable, Equatable, Sendable {
     public var quitBrowsers: [String]? = nil
     /// The daemon's version, sent with `hello` (nil from daemons older than 1.1.0).
     public var version: String? = nil
+    /// Only for `importDomains`.
+    public var importReport: ImportReport? = nil
 
     public init(ok: Bool, error: String? = nil, initialized: Bool? = nil, state: BlockState? = nil,
                 quitBrowsers: [String]? = nil) {
