@@ -7,14 +7,27 @@ import SiteLockCore
 final class FirefoxEnforcer: Enforcer {
     private let domain = FirefoxPolicy.preferencesDomain as CFString
 
-    func enforce(_ state: BlockState, now: Date, changed: Bool) {
+    let bundleID = Browser.firefoxID
+
+    func enforce(_ state: BlockState, now: Date, changed: Bool) -> [String] {
+        guard state.browsers.contains(bundleID) else {
+            // Not enforcing here: make sure none of our keys are left behind.
+            let file = readFile() ?? [:]
+            if FirefoxPolicy.managedKeys.contains(where: { file[$0] != nil }) || !readPreferences().isEmpty {
+                clear()
+            }
+            return []
+        }
         let policy = FirefoxPolicy(blockedDomains: state.effectiveBlocked(now: now))
         if !policy.isSatisfied(by: readFile()) || !policy.isSatisfied(by: readPreferences()) {
             if !changed { log("Firefox policy missing or modified; re-applying") }
             write(policy)
         }
         // Firefox reads WebsiteFilter only at startup, so a new list needs a Firefox restart.
-        if changed { FirefoxProcess.quitAll() }
+        if changed, let browser = Browser.byID(bundleID), BrowserProcess.quit(processName: browser.processName) {
+            return [bundleID]
+        }
+        return []
     }
 
     /// Removes the keys SiteLock manages (used by uninstall).
@@ -67,16 +80,18 @@ final class FirefoxEnforcer: Enforcer {
     }
 }
 
-enum FirefoxProcess {
-    /// Sends SIGTERM to every Firefox main process (all users), waits up to 10 s, then SIGKILLs
-    /// leftovers. Firefox restores the session on next launch per the user's Firefox settings.
-    static func quitAll() {
-        guard runTool("/usr/bin/pkill", ["-TERM", "-x", "firefox"]) == 0 else { return } // 1 = none running
-        log("quit Firefox so it reloads the policy")
+enum BrowserProcess {
+    /// Sends SIGTERM to every main process of the browser (all users), waits up to 10 s, then
+    /// SIGKILLs leftovers. Returns true if it was running. The browser restores its session on
+    /// next launch per the user's settings.
+    static func quit(processName: String) -> Bool {
+        guard runTool("/usr/bin/pkill", ["-TERM", "-x", processName]) == 0 else { return false } // 1 = none running
+        log("quit \(processName) so it reloads the policy")
         for _ in 0..<20 {
-            if runTool("/usr/bin/pgrep", ["-x", "firefox"]) != 0 { return }
+            if runTool("/usr/bin/pgrep", ["-x", processName]) != 0 { return true }
             Thread.sleep(forTimeInterval: 0.5)
         }
-        _ = runTool("/usr/bin/pkill", ["-KILL", "-x", "firefox"])
+        _ = runTool("/usr/bin/pkill", ["-KILL", "-x", processName])
+        return true
     }
 }

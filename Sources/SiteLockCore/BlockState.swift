@@ -6,6 +6,7 @@ public enum BlockStateError: Error, Equatable, CustomStringConvertible {
     case notUnblocked(String)
     case invalidDuration(Int)
     case tooManyDomains(Int)
+    case unsupportedBrowser(String)
 
     public var description: String {
         switch self {
@@ -14,6 +15,7 @@ public enum BlockStateError: Error, Equatable, CustomStringConvertible {
         case .notUnblocked(let d): return "\(d) is not temporarily unblocked"
         case .invalidDuration(let m): return "Unblock duration must be 1–\(BlockState.maxUnblockMinutes) minutes (got \(m))"
         case .tooManyDomains(let n): return "Firefox accepts at most \(n) blocked domains"
+        case .unsupportedBrowser(let b): return "SiteLock cannot block in \(b)"
         }
     }
 }
@@ -28,9 +30,35 @@ public struct BlockState: Codable, Equatable, Sendable {
     public private(set) var domains: [String]
     public private(set) var unblocks: [String: Date]
 
-    public init(domains: [String] = [], unblocks: [String: Date] = [:]) {
+    /// Bundle ids of the browsers SiteLock enforces on (sorted).
+    public private(set) var browsers: [String]
+
+    public init(domains: [String] = [], unblocks: [String: Date] = [:], browsers: [String] = [Browser.firefoxID]) {
         self.domains = domains.sorted()
         self.unblocks = unblocks
+        self.browsers = browsers.sorted()
+    }
+
+    private enum CodingKeys: String, CodingKey { case domains, unblocks, browsers }
+
+    /// state.json from versions before 1.3.0 has no `browsers`: Firefox was the only browser.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        domains = try c.decode([String].self, forKey: .domains)
+        unblocks = try c.decode([String: Date].self, forKey: .unblocks)
+        browsers = (try c.decodeIfPresent([String].self, forKey: .browsers) ?? [Browser.firefoxID]).sorted()
+    }
+
+    /// Turns enforcement in a browser on or off. Only supported catalog browsers are accepted.
+    public mutating func setBrowser(_ id: String, enabled: Bool) throws {
+        guard let browser = Browser.byID(id), browser.isSupported else { throw BlockStateError.unsupportedBrowser(id) }
+        if enabled {
+            guard !browsers.contains(id) else { return }
+            browsers.append(id)
+            browsers.sort()
+        } else {
+            browsers.removeAll { $0 == id }
+        }
     }
 
     public mutating func add(_ domain: String) throws {

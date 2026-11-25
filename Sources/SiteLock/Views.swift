@@ -59,7 +59,7 @@ struct UninstallSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Uninstall SiteLock")
                 .font(.headline)
-            Text("Removes the background service, the blocklist and your SiteLock password. Firefox stops blocking after it restarts.")
+            Text("Removes the background service, the blocklist and your SiteLock password. Browsers stop blocking after they restart.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             SecureField("SiteLock password", text: $password)
@@ -136,7 +136,7 @@ struct RemovedView: View {
             AppIconView()
             Text("SiteLock was removed")
                 .font(.title2)
-            Text("Restart Firefox so it stops blocking. You can now move SiteLock.app to the Trash.")
+            Text("Restart your browsers so they stop blocking. You can now move SiteLock.app to the Trash.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Button("Quit") { NSApplication.shared.terminate(nil) }
@@ -179,7 +179,7 @@ struct UnreachableView: View {
             AppIconView()
             Text("SiteLock is not installed")
                 .font(.title2)
-            Text("Install the background service that blocks sites in Firefox. macOS asks for an administrator password once.")
+            Text("Install the background service that blocks sites in your browsers. macOS asks for an administrator password once.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Text(reason)
@@ -274,6 +274,12 @@ struct BlocklistView: View {
     @State private var editDomain: String?
     @State private var removeDomain: String?
     @State private var changingPassword = false
+    @State private var choosingBrowsers = false
+
+    private var blockingSummary: String {
+        let names = model.state.browsers.compactMap { Browser.byID($0)?.name }
+        return names.isEmpty ? "Blocking in: no browser" : "Blocking in: " + names.joined(separator: ", ")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -310,13 +316,22 @@ struct BlocklistView: View {
             }
 
             HStack {
-                Text("Changes quit and reopen Firefox so it loads the new list.")
+                Text(blockingSummary)
+                    .font(.caption)
+                    .foregroundStyle(model.state.browsers.isEmpty ? Color.red : Color.secondary)
+                Spacer()
+                Button("Browsers…") { choosingBrowsers = true }
+            }
+
+            HStack {
+                Text("Changes quit and reopen the selected browsers so they load the new list.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 if model.busy { ProgressView().controlSize(.small) }
                 Menu {
                     Button("Check for Updates…") { model.showingUpdates = true }
+                    Button("Browsers…") { choosingBrowsers = true }
                     Button("Change Password…") { changingPassword = true }
                     Divider()
                     Button("Uninstall SiteLock…") { model.showingUninstall = true }
@@ -342,6 +357,7 @@ struct BlocklistView: View {
             }
         }
         .sheet(isPresented: $changingPassword) { ChangePasswordSheet() }
+        .sheet(isPresented: $choosingBrowsers) { BrowsersSheet() }
         .confirmationDialog("Remove \(removeDomain ?? "") from the blocklist?",
                             isPresented: Binding(get: { removeDomain != nil }, set: { if !$0 { removeDomain = nil } })) {
             Button("Remove", role: .destructive) {
@@ -354,6 +370,46 @@ struct BlocklistView: View {
         let domain = newDomain
         guard !domain.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         Task { if await model.add(domain) { newDomain = "" } }
+    }
+}
+
+struct BrowsersSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Browsers")
+                .font(.headline)
+            ForEach(model.installedBrowsers) { browser in
+                if browser.isSupported {
+                    Toggle(browser.name, isOn: Binding(
+                        get: { model.state.browsers.contains(browser.id) },
+                        set: { enabled in Task { await model.setBrowser(browser.id, enabled: enabled) } }))
+                        .disabled(model.busy)
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(browser.name)
+                            .foregroundStyle(.secondary)
+                        Text(browser.unsupportedReason ?? "")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Text("Turning a browser on or off restarts it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ErrorText(message: model.error)
+            HStack {
+                Spacer()
+                if model.busy { ProgressView().controlSize(.small) }
+                Button("Done") { model.error = nil; dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(width: 360)
     }
 }
 

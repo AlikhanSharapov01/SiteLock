@@ -36,7 +36,11 @@ switch CommandLine.arguments.dropFirst().first {
 case "run":
     requireRoot()
     signal(SIGPIPE, SIG_IGN)
-    let daemon = Daemon(enforcers: [FirefoxEnforcer()])
+    var enforcers: [Enforcer] = [FirefoxEnforcer()]
+    for browser in Browser.catalog {
+        if case .chromium = browser.engine { enforcers.append(ChromiumEnforcer(browser: browser)) }
+    }
+    let daemon = Daemon(enforcers: enforcers)
     do { try daemon.start() } catch { log("failed to start: \(error)"); exit(1) }
     dispatchMain()
 
@@ -57,7 +61,7 @@ case "uninstall":
     }
     Installer.stopService()
     Installer.removeFiles()
-    print("SiteLock removed. Restart Firefox so it drops the blocklist, then move SiteLock.app to the Trash.")
+    print("SiteLock removed. Restart your browsers so they drop the blocklist, then move SiteLock.app to the Trash.")
 
 case "version":
     print(SiteLockVersion.current)

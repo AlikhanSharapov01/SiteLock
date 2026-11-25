@@ -13,8 +13,6 @@ final class AppModel: ObservableObject {
         case removed
     }
 
-    static let firefoxBundleID = "org.mozilla.firefox"
-
     @Published var screen: Screen = .connecting
     @Published var state = BlockState()
     @Published var error: String?
@@ -206,22 +204,42 @@ final class AppModel: ObservableObject {
         _ = await change(Request(.reblock, password: password, domain: domain))
     }
 
+    func setBrowser(_ id: String, enabled: Bool) async {
+        var request = Request(.setBrowser, password: password)
+        request.browser = id
+        request.enabled = enabled
+        _ = await change(request)
+    }
+
+    /// Browsers installed on this Mac, plus enabled ones that are gone (so they can be turned off).
+    var installedBrowsers: [Browser] {
+        Browser.catalog.filter { browser in
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: browser.id) != nil
+                || state.browsers.contains(browser.id)
+        }
+    }
+
     // MARK: - Private
 
-    /// Sends a change. If the daemon had to quit Firefox to apply it, reopen Firefox.
+    /// Sends a change. Browsers the daemon had to quit to apply it are reopened if they were running.
     private func change(_ request: Request) async -> Bool {
-        let firefoxWasRunning = !NSRunningApplication
-            .runningApplications(withBundleIdentifier: Self.firefoxBundleID).isEmpty
+        let wasRunning = Browser.catalog.map(\.id).filter { id in
+            !NSRunningApplication.runningApplications(withBundleIdentifier: id).isEmpty
+        }
         guard let response = await perform(request) else { return false }
         if let newState = response.state { state = newState }
-        if response.firefoxQuit == true && firefoxWasRunning { await relaunchFirefox() }
+        let quit = response.quitBrowsers ?? []
+        await relaunch(bundleIDs: quit.filter { wasRunning.contains($0) })
         return true
     }
 
-    private func relaunchFirefox() async {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.firefoxBundleID) else { return }
+    private func relaunch(bundleIDs: [String]) async {
+        guard !bundleIDs.isEmpty else { return }
         try? await Task.sleep(nanoseconds: 1_000_000_000)
-        _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        for id in bundleIDs {
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { continue }
+            _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        }
     }
 
     /// Runs a request, showing failures in `error`. Nil when it failed.
