@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SiteLockCore
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -17,6 +18,8 @@ final class AppModel: ObservableObject {
     @Published var state = BlockState()
     @Published var error: String?
     @Published var busy = false
+    /// Result of the last import, shown under the list until the next change.
+    @Published var importSummary: String?
     /// Version of the running service when it differs from this app's (nil: same, or unknown).
     @Published var installedVersion: String?
     @Published var updateAvailable = false
@@ -182,6 +185,7 @@ final class AppModel: ObservableObject {
         password = ""
         state = BlockState()
         error = nil
+        importSummary = nil
         screen = .locked
     }
 
@@ -215,6 +219,60 @@ final class AppModel: ObservableObject {
         _ = await change(request)
     }
 
+    /// Asks for a .txt file and adds its entries in one change.
+    func importList() async {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a text file with one site per line"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importSummary = nil
+        let text: String
+        do { text = try String(contentsOf: url, encoding: .utf8) } catch {
+            self.error = "Could not read \(url.lastPathComponent) as UTF-8 text"
+            return
+        }
+        var seen = Set<String>()
+        let entries = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") && seen.insert($0).inserted }
+        // One request must fit the wire limit: send the longest prefix that does.
+        func size(_ count: Int) -> Int {
+            var request = Request(.importDomains, password: password)
+            request.domains = Array(entries.prefix(count))
+            return (try? Wire.encode(request).count) ?? Int.max
+        }
+        let limit = Wire.maxMessageBytes - 4096
+        var fit = entries.count
+        if size(fit) > limit {
+            var low = 0, high = entries.count // size(low) fits, size(high) does not
+            while high - low > 1 {
+                let mid = (low + high) / 2
+                if size(mid) <= limit { low = mid } else { high = mid }
+            }
+            fit = low
+        }
+        var request = Request(.importDomains, password: password)
+        request.domains = Array(entries.prefix(fit))
+        guard await change(request) else { return }
+        let dropped = entries.count - fit
+        if dropped > 0 {
+            importSummary = (importSummary ?? "") + " · \(dropped) not imported: file too large"
+        }
+    }
+
+    /// Saves the loaded list as a text file, one host per line.
+    func exportList() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "SiteLock blocklist.txt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let text = (["# SiteLock blocklist"] + state.domains.sorted()).joined(separator: "\n") + "\n"
+        do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
+            self.error = "Could not save the list: \(error.localizedDescription)"
+        }
+    }
+
     /// Browsers installed on this Mac, plus enabled ones that are gone (so they can be turned off).
     var installedBrowsers: [Browser] {
         Browser.catalog.filter { browser in
@@ -230,8 +288,17 @@ final class AppModel: ObservableObject {
         let wasRunning = Browser.catalog.map(\.id).filter { id in
             !NSRunningApplication.runningApplications(withBundleIdentifier: id).isEmpty
         }
+        importSummary = nil
         guard let response = await perform(request) else { return false }
         if let newState = response.state { state = newState }
+        if let report = response.importReport {
+            var summary = report.summary
+            if report.invalid > 0 {
+                summary += "\nNot valid: " + report.invalidEntries.joined(separator: ", ")
+                    + (report.invalid > report.invalidEntries.count ? " …" : "")
+            }
+            importSummary = summary
+        }
         let quit = response.quitBrowsers ?? []
         await relaunch(bundleIDs: quit.filter { wasRunning.contains($0) })
         return true

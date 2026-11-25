@@ -96,12 +96,13 @@ public final class SiteLockService {
         }
         if request.command == .changePassword { return changePassword(request.newPassword ?? "") }
         if request.command == .setBrowser { return setBrowser(request) }
+        if request.command == .importDomains { return importDomains(request, now: now) }
 
         var next = state
         do {
             let domain = { try Domain.normalize(request.domain ?? "") }
             switch request.command {
-            case .list, .hello, .setup, .changePassword, .uninstall, .setBrowser: break
+            case .list, .hello, .setup, .changePassword, .uninstall, .setBrowser, .importDomains: break
             case .add: try next.add(domain())
             case .remove: try next.remove(domain())
             case .unblock: try next.unblock(domain(), minutes: request.minutes ?? 0, now: now)
@@ -120,6 +121,27 @@ public final class SiteLockService {
             quitIDs = enforce(true, nil)
         }
         return Response(ok: true, state: state, quitBrowsers: quitIDs)
+    }
+
+    /// The caller is authenticated. Adds all entries in one change: one save, one enforcement pass.
+    private func importDomains(_ request: Request, now: Date) -> Response {
+        var next = state
+        let report = next.importDomains(request.domains ?? [])
+        do {
+            if next != state { try saveState(next) }
+        } catch {
+            return .failure("\(error)")
+        }
+        let changed = next.effectiveBlocked(now: now) != state.effectiveBlocked(now: now)
+        state = next
+        var quitIDs: [String] = []
+        if changed {
+            log("import: \(report.summary); applying new list")
+            quitIDs = enforce(true, nil)
+        }
+        var response = Response(ok: true, state: state, quitBrowsers: quitIDs)
+        response.importReport = report
+        return response
     }
 
     /// The caller is authenticated. Turns enforcement in one browser on or off and restarts that
