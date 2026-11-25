@@ -1,9 +1,26 @@
 import Foundation
+import os
 import SiteLockCore
 
+private let logger = Logger(subsystem: "local.sitelock", category: "sitelockd")
+
+/// Writes to the macOS unified log (no log file on disk). Read it with:
+/// log show --last 1h --predicate 'subsystem == "local.sitelock"'
 func log(_ message: String) {
-    let stamp = ISO8601DateFormatter().string(from: Date())
-    FileHandle.standardError.write(Data("\(stamp) sitelockd: \(message)\n".utf8))
+    logger.log("\(message, privacy: .public)")
+}
+
+/// Runs a command-line tool and returns its exit status (-1 if it could not start).
+@discardableResult
+func runTool(_ tool: String, _ args: [String]) -> Int32 {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: tool)
+    p.arguments = args
+    p.standardOutput = FileHandle.nullDevice
+    p.standardError = FileHandle.nullDevice
+    do { try p.run() } catch { log("\(tool) failed: \(error)"); return -1 }
+    p.waitUntilExit()
+    return p.terminationStatus
 }
 
 /// JSON files under /Library/Application Support/SiteLock (root:wheel, dir 0700, files 0600).

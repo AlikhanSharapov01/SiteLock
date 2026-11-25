@@ -15,8 +15,8 @@ with admin rights on the Mac can still remove it (see [Known limitations](#known
   policy back if it is deleted or edited.
 - The SiteLock app is only needed when you want to change the list.
 
-Requirements: macOS 13 or later, Firefox, Xcode or the Command Line Tools
-(`xcode-select --install`) to build. Apple silicon and Intel Macs are both supported
+Requirements: macOS 13 or later, Firefox; to build, Xcode or the Command Line Tools
+(`xcode-select --install`). Apple silicon and Intel Macs are both supported
 (universal binary).
 
 ## Install
@@ -24,21 +24,24 @@ Requirements: macOS 13 or later, Firefox, Xcode or the Command Line Tools
 ```bash
 git clone https://github.com/AlikhanSharapov01/SiteLock.git
 cd SiteLock
-./scripts/build.sh          # as your normal user; builds ./build/sitelockd and ./build/SiteLock.app
-sudo ./install.sh           # one time; asks for your Mac admin password
+./scripts/build.sh                     # as your normal user; builds ./build/SiteLock.app
+ditto build/SiteLock.app /Applications/SiteLock.app
+sudo /Applications/SiteLock.app/Contents/MacOS/sitelockd install   # one time; admin password
 ```
 
-Then open **/Applications/SiteLock.app** and set your SiteLock password.
+Then open **SiteLock** and set your SiteLock password. To update, replace the app and run the
+same `sitelockd install` again; the password and the list are kept.
 
-`install.sh` copies:
+SiteLock.app carries everything; `sitelockd install` puts only these on the system:
 
 | What | Where |
 |---|---|
-| Background service (root) | `/Library/PrivilegedHelperTools/sitelockd` |
+| Background service (root-owned copy of `sitelockd`) | `/Library/PrivilegedHelperTools/sitelockd` |
 | Starts it at boot, restarts it if killed | `/Library/LaunchDaemons/local.sitelock.daemon.plist` |
-| The app | `/Applications/SiteLock.app` |
 | Password hash and list (root only, created on first run) | `/Library/Application Support/SiteLock/` |
-| Log | `/var/log/sitelockd.log` |
+
+There is no log file: the service logs to the macOS system log
+(`log show --last 1h --predicate 'subsystem == "local.sitelock"'`).
 
 macOS shows a system notification ("Background Items Added"), and `sitelockd` appears in
 System Settings → General → Login Items → *Allow in the Background*. That is macOS's own notice,
@@ -52,7 +55,7 @@ built `SiteLock.app` from somewhere else (download, AirDrop) and macOS says it "
 
 - Right-click (Control-click) the app → **Open** → **Open**, or
 - System Settings → Privacy & Security → **Open Anyway**, or
-- `xattr -dr com.apple.quarantine /Applications/SiteLock.app` (`install.sh` also does this).
+- `xattr -dr com.apple.quarantine /Applications/SiteLock.app`.
 
 ## Use
 
@@ -85,14 +88,14 @@ already in the list), and the edited entry starts blocked: a running temporary u
 ## Uninstall
 
 ```bash
-sudo ./uninstall.sh
+sudo /Library/PrivilegedHelperTools/sitelockd uninstall
 ```
 
-It asks for your SiteLock password and removes nothing if it is wrong. It removes the service,
-the app, the stored data and the log, and deletes the keys SiteLock set in
+It asks for your SiteLock password and removes nothing if it is wrong. It removes the service and
+the stored data, and deletes the keys SiteLock set in
 `/Library/Preferences/org.mozilla.firefox.plist` (`EnterprisePoliciesEnabled`, `WebsiteFilter`,
 `BlockAboutConfig`). If you had other Firefox policies in that file, set
-`EnterprisePoliciesEnabled` again. Restart Firefox afterwards.
+`EnterprisePoliciesEnabled` again. Restart Firefox afterwards and move SiteLock.app to the Trash.
 
 ## How it works
 
@@ -160,13 +163,13 @@ accepted while no password is stored.
 32-byte hash, constant-time comparison. `auth.json` is mode 0600 in a root-only 0700 directory.
 The app keeps the password in memory only while unlocked.
 
-### Why a LaunchDaemon installed by script, not SMAppService + XPC
+### Why a classic LaunchDaemon, not SMAppService + XPC
 
 `SMAppService.daemon(plistName:)` with an XPC service is Apple's preferred design. Without a
 paid Developer ID, though, the app can only be ad-hoc signed. Daemon registration and the
 code-signing checks that make XPC trustworthy both depend on a real signing identity (Team ID),
-and ad-hoc signing does not give one. So v1 uses a classic root LaunchDaemon installed once with
-`sudo ./install.sh`, plus a local socket authenticated by the SiteLock password, which does not
+and ad-hoc signing does not give one. So SiteLock uses a classic root LaunchDaemon that
+`sitelockd install` sets up once with admin rights, plus a local socket authenticated by the SiteLock password, which does not
 depend on code signing. Moving to SMAppService later only changes installation and transport.
 The core logic and the daemon's request handling stay the same.
 
@@ -201,7 +204,7 @@ only inside a user's GUI session, so that enforcer would run in a per-user Launc
 
 ## Manual test checklist (Firefox)
 
-Run after `sudo ./install.sh`. Expected results in *italics*.
+Run after installing. Expected results in *italics*.
 
 1. Open SiteLock → set password `test-pass-1` (and confirm). *List view appears.*
 2. Run `sudo defaults read /Library/Preferences/org.mozilla.firefox`.
@@ -221,7 +224,7 @@ Run after `sudo ./install.sh`. Expected results in *italics*.
    app row shows "Blocked".*
 11. Unblock linkedin.com for 5 minutes, then *Re-block now*. *Firefox restarts; LinkedIn blocked.*
 12. Tamper: `sudo defaults delete /Library/Preferences/org.mozilla.firefox WebsiteFilter`, wait
-    3 s, read it again. *The key is back.* `tail /var/log/sitelockd.log` shows
+    3 s, read it again. *The key is back.* `log show --last 5m --predicate 'subsystem == "local.sitelock"'` shows
     "Firefox policy missing or modified; re-applying".
 13. Tamper: `sudo rm /Library/Preferences/org.mozilla.firefox.plist`, wait 3 s.
     *The file exists again with SiteLock's keys.*
@@ -230,8 +233,9 @@ Run after `sudo ./install.sh`. Expected results in *italics*.
 16. Wrong password in the app 5 times. *"Too many wrong passwords…" for 60 seconds.*
 17. Remove instagram.com. *Firefox restarts; instagram.com loads.*
 18. Update Firefox (Firefox → About Firefox) if an update is available. *Blocking still works.*
-19. `sudo ./uninstall.sh` with a wrong password. *"Wrong password. Nothing was removed."*
-20. `sudo ./uninstall.sh` with the right password, restart Firefox. *Sites load; `about:policies`
+19. `sudo /Library/PrivilegedHelperTools/sitelockd uninstall` with a wrong password.
+    *"wrong password; nothing was removed".*
+20. The same with the right password, restart Firefox. *Sites load; `about:policies`
     shows no active policies (unless you have others).*
 
 ## Development

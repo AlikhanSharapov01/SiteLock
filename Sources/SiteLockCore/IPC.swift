@@ -1,7 +1,16 @@
 import Foundation
 
-/// Fixed paths shared by the daemon, the app and the install scripts.
+/// Version of the app and the daemon (kept equal to CFBundleShortVersionString in Resources/Info.plist).
+public enum SiteLockVersion {
+    public static let current = "1.1.0"
+}
+
+/// Fixed paths shared by the daemon and the app.
 public enum Paths {
+    public static let launchDaemonLabel = "local.sitelock.daemon"
+    /// The installed daemon: a root-owned copy of SiteLock.app/Contents/MacOS/sitelockd.
+    public static let helper = "/Library/PrivilegedHelperTools/sitelockd"
+    public static let launchDaemonPlist = "/Library/LaunchDaemons/\(launchDaemonLabel).plist"
     public static let socket = "/var/run/sitelockd.sock"
     public static let dataDirectory = "/Library/Application Support/SiteLock"
     public static let passwordFile = dataDirectory + "/auth.json"

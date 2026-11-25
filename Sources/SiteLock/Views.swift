@@ -60,7 +60,7 @@ struct UnreachableView: View {
                 .foregroundStyle(.secondary)
             Text("SiteLock is not running")
                 .font(.title2)
-            Text("The background service could not be reached. Install it with `sudo ./install.sh`, then try again.")
+            Text("The background service could not be reached. Install it in Terminal with `sudo /Applications/SiteLock.app/Contents/MacOS/sitelockd install`, then try again.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Text(reason)

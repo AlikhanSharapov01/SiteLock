@@ -12,18 +12,18 @@ Swift 5.9+ (SwiftPM, `swift-tools-version:5.9`), SwiftUI, macOS 13+. No external
 Universal binaries (arm64 + x86_64), ad-hoc signed.
 
 ## Commands
-- Build (universal, into `build/`): `./scripts/build.sh` (as the normal user, never sudo)
+- Build (universal `build/SiteLock.app`, daemon inside at `Contents/MacOS/sitelockd`): `./scripts/build.sh` (as the normal user, never sudo)
 - Test: `swift test`
 - Test the core on Linux: `docker run --rm -v "$PWD":/src -w /src swift:6.0-noble swift test --build-path /tmp/b`
 - CI: `.github/workflows/macos.yml` (manual `workflow_dispatch` + pull requests)
-- Install / uninstall: `sudo ./install.sh`, `sudo ./uninstall.sh` — the user runs these, never an agent
+- Install / uninstall: `sudo …/sitelockd install`, `sudo /Library/PrivilegedHelperTools/sitelockd uninstall` — the user runs these, never an agent
 
 ## Layout
 - `Sources/SiteLockCore/` — platform-independent logic: domains, block state + unblock timing, Firefox policy, password hashing, IPC messages
 - `Sources/sitelockd/` — root LaunchDaemon (macOS only): socket server, policy enforcer, Firefox restart
 - `Sources/SiteLock/` — SwiftUI app (macOS only)
 - `Tests/SiteLockCoreTests/` — unit tests (password hashing tests run on macOS only)
-- `Resources/` — app `Info.plist`, LaunchDaemon plist
+- `Resources/` — app `Info.plist` (version must equal `SiteLockVersion.current`), `AppIcon.icns`
 - `AGENTS.md`, `.claude/agents/` — multi-agent roles
 
 ## Conventions
@@ -31,4 +31,4 @@ Universal binaries (arm64 + x86_64), ad-hoc signed.
 - `Package.swift` adds the `sitelockd` and `SiteLock` targets only on macOS.
 
 ## Do not touch
-- Never run `install.sh`, `uninstall.sh`, `launchctl`, or `defaults write` on the user's machine.
+- Never run `sitelockd install` / `uninstall`, `launchctl`, or `defaults write` on the user's machine.

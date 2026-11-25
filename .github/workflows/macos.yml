@@ -19,11 +19,13 @@ jobs:
         run: ./scripts/build.sh
       - name: Verify architectures
         run: |
-          lipo -info build/sitelockd build/SiteLock.app/Contents/MacOS/SiteLock
-          lipo build/sitelockd -verify_arch arm64 x86_64
-          lipo build/SiteLock.app/Contents/MacOS/SiteLock -verify_arch arm64 x86_64
-          codesign --verify --verbose build/sitelockd build/SiteLock.app
+          APP=build/SiteLock.app
+          lipo -info "$APP/Contents/MacOS/sitelockd" "$APP/Contents/MacOS/SiteLock"
+          lipo "$APP/Contents/MacOS/sitelockd" -verify_arch arm64 x86_64
+          lipo "$APP/Contents/MacOS/SiteLock" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict --verbose "$APP"
+          test "$("$APP/Contents/MacOS/sitelockd" version)" = "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
           test -s build/SiteLock.app/Contents/Resources/AppIcon.icns
           /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" build/SiteLock.app/Contents/Info.plist
-      - name: Shell scripts parse
-        run: for f in install.sh uninstall.sh scripts/build.sh; do bash -n "$f"; done
+      - name: Build script parses
+        run: bash -n scripts/build.sh

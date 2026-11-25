@@ -152,7 +152,7 @@ final class Daemon {
     /// Nil on success, otherwise a message for the user.
     private func authenticate(_ candidate: String?) -> String? {
         guard let record = password else {
-            return passwordUnreadable ? "The password file cannot be read; see /var/log/sitelockd.log" : "No password set yet"
+            return passwordUnreadable ? "The password file cannot be read; see the system log (subsystem local.sitelock)" : "No password set yet"
         }
         if let wait = throttle.lockedFor(now: Date()) {
             return "Too many wrong passwords. Try again in \(Int(wait.rounded(.up))) s"

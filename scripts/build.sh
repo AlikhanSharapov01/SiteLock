@@ -1,7 +1,6 @@
 #!/bin/bash
-# Builds universal (arm64 + x86_64) binaries into ./build:
-#   build/sitelockd       – the root LaunchDaemon
-#   build/SiteLock.app    – the GUI
+# Builds build/SiteLock.app: the GUI plus the daemon (Contents/MacOS/sitelockd), both universal
+# (arm64 + x86_64).
 # Run as your normal user (not sudo). Needs Xcode or the Command Line Tools.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -23,14 +22,15 @@ X86=$(bin x86_64)
 rm -rf build
 APP=build/SiteLock.app
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-lipo -create "$ARM/sitelockd" "$X86/sitelockd" -output build/sitelockd
+lipo -create "$ARM/sitelockd" "$X86/sitelockd" -output "$APP/Contents/MacOS/sitelockd"
 lipo -create "$ARM/SiteLock" "$X86/SiteLock" -output "$APP/Contents/MacOS/SiteLock"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # Ad-hoc signatures: no Apple Developer account needed; Apple silicon requires a signature to run.
-codesign --force --sign - --identifier local.sitelock.daemon build/sitelockd
+# The nested daemon is signed first, then the app seals it.
+codesign --force --sign - --identifier local.sitelock.daemon "$APP/Contents/MacOS/sitelockd"
 codesign --force --sign - "$APP"
 
-lipo -info build/sitelockd "$APP/Contents/MacOS/SiteLock"
-echo "Built ./build/sitelockd and ./build/SiteLock.app. Next: sudo ./install.sh"
+lipo -info "$APP/Contents/MacOS/sitelockd" "$APP/Contents/MacOS/SiteLock"
+echo "Built ./build/SiteLock.app"

@@ -1,15 +1,35 @@
 import Foundation
 import SiteLockCore
 
-// sitelockd run              – the LaunchDaemon (root)
-// sitelockd verify-password  – reads a password from stdin; exit 0 if it matches (used by uninstall.sh)
-// sitelockd clear-policy     – removes SiteLock's keys from the Firefox policy (used by uninstall.sh)
+// sitelockd lives inside SiteLock.app (Contents/MacOS/sitelockd).
+//   sitelockd run        – the LaunchDaemon itself (started by launchd)
+//   sitelockd install    – install or update the LaunchDaemon from this binary (root)
+//   sitelockd uninstall  – remove SiteLock; asks for the SiteLock password (root)
+//   sitelockd version    – print the version
 
 func requireRoot() {
     guard getuid() == 0 else {
-        FileHandle.standardError.write(Data("sitelockd: must run as root\n".utf8))
+        FileHandle.standardError.write(Data("sitelockd: run this with sudo\n".utf8))
         exit(77)
     }
+}
+
+func fail(_ message: String) -> Never {
+    FileHandle.standardError.write(Data("sitelockd: \(message)\n".utf8))
+    exit(1)
+}
+
+/// The absolute path of this executable.
+func ownPath() -> String {
+    var buf = [CChar](repeating: 0, count: Int(PATH_MAX))
+    guard realpath(CommandLine.arguments[0], &buf) != nil else { fail("cannot resolve own path") }
+    return String(cString: buf)
+}
+
+/// Reads the password without echo from the terminal, or a line from stdin when piped.
+func readPassword() -> String {
+    if isatty(STDIN_FILENO) != 0, let p = getpass("SiteLock password: ") { return String(cString: p) }
+    return readLine(strippingNewline: true) ?? ""
 }
 
 switch CommandLine.arguments.dropFirst().first {
@@ -20,20 +40,29 @@ case "run":
     do { try daemon.start() } catch { log("failed to start: \(error)"); exit(1) }
     dispatchMain()
 
-case "verify-password":
+case "install":
     requireRoot()
-    let record: PasswordRecord?
-    do { record = try Storage.load(PasswordRecord.self, from: Paths.passwordFile) }
-    catch { log("cannot read password file: \(error)"); exit(1) }
-    guard let record else { print("no password set"); exit(2) }
-    let input = readLine(strippingNewline: true) ?? ""
-    exit(((try? PasswordHasher.verify(password: input, against: record)) ?? false) ? 0 : 1)
+    do { try Installer.install(from: ownPath()) } catch { fail("\(error)") }
+    print("SiteLock \(SiteLockVersion.current) is installed and running. Open SiteLock.app to set your password.")
 
-case "clear-policy":
+case "uninstall":
     requireRoot()
-    FirefoxEnforcer().clear()
+    if FileManager.default.fileExists(atPath: Paths.passwordFile) {
+        guard let record = try? Storage.load(PasswordRecord.self, from: Paths.passwordFile) else {
+            fail("cannot read \(Paths.passwordFile); nothing was removed")
+        }
+        guard (try? PasswordHasher.verify(password: readPassword(), against: record)) == true else {
+            fail("wrong password; nothing was removed")
+        }
+    }
+    Installer.stopService()
+    Installer.removeFiles()
+    print("SiteLock removed. Restart Firefox so it drops the blocklist, then move SiteLock.app to the Trash.")
+
+case "version":
+    print(SiteLockVersion.current)
 
 default:
-    print("usage: sitelockd run | verify-password | clear-policy")
+    print("usage: sitelockd install | uninstall | version | run")
     exit(64)
 }
