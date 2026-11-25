@@ -2,7 +2,22 @@ import Foundation
 
 /// Version of the app and the daemon (kept equal to CFBundleShortVersionString in Resources/Info.plist).
 public enum SiteLockVersion {
-    public static let current = "1.1.0"
+    public static let current = "1.2.0"
+
+    /// True if `candidate` (e.g. "1.10.0" or "v1.10.0") is a later version than `base`.
+    /// Compares dot-separated numbers; missing parts count as 0.
+    public static func isNewer(_ candidate: String, than base: String) -> Bool {
+        func parts(_ v: String) -> [Int] {
+            let trimmed = v.hasPrefix("v") ? String(v.dropFirst()) : v
+            return trimmed.split(separator: ".").map { Int($0) ?? 0 }
+        }
+        let a = parts(candidate), b = parts(base)
+        for i in 0..<max(a.count, b.count) {
+            let x = i < a.count ? a[i] : 0, y = i < b.count ? b[i] : 0
+            if x != y { return x > y }
+        }
+        return false
+    }
 }
 
 /// Fixed paths shared by the daemon and the app.
