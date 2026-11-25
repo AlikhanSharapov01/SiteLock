@@ -29,6 +29,8 @@ struct ContentView: View {
         .sheet(isPresented: $model.showingUninstall) { UninstallSheet() }
         .sheet(isPresented: $model.showingUpdates) { UpdatesSheet() }
         .task { await model.connect() }
+        // The app keeps running in the menu bar after the window closes: forget the password.
+        .onDisappear { if model.screen == .unlocked { model.lock() } }
     }
 }
 

@@ -22,6 +22,7 @@ Click **Install** in the app and set your SiteLock password. Updates: **Check fo
 - Choose the browsers to block in under **Browsers…**: Firefox, Chrome, Edge, Brave, Vivaldi, Chromium.
 - `youtube.com` blocks YouTube and its subdomains; `www.youtube.com` leaves `music.youtube.com` open.
 - Unblock a site for a set time; it is blocked again automatically.
+- The menu bar icon shows the status, lists temporary unblocks with a **Re-block now** button, and can open SiteLock at login.
 - The browser restarts after each change to load the new list.
 
 ## Uninstall

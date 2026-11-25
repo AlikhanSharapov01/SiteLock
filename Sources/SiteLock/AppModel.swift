@@ -26,6 +26,9 @@ final class AppModel: ObservableObject {
     @Published var showingUninstall = false
     @Published var showingUpdates = false
     @Published var updateCheck: UpdateCheck = .idle
+    /// Last answer to the password-free `status` request; nil when the service cannot be reached.
+    @Published var status: Status?
+    @Published var launchAtLoginError: String?
 
     enum UpdateCheck: Equatable {
         case idle, checking, upToDate, installing
@@ -38,6 +41,28 @@ final class AppModel: ObservableObject {
 
     /// Kept in memory only while unlocked; every daemon request is authenticated with it.
     private var password = ""
+
+    init() {
+        Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshStatus()
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+            }
+        }
+    }
+
+    /// Cheap and unauthenticated; feeds the menu bar item.
+    func refreshStatus() async {
+        status = try? await send(Request(.status)).status
+    }
+
+    /// Ends a temporary unblock from the menu bar (no password needed), reopening browsers the daemon quit.
+    func reblockNow(_ domain: String) async {
+        if await change(Request(.reblockNow, domain: domain)) {
+            try? state.reblock(domain) // the response carries no list; keep an open list in step
+        }
+        await refreshStatus()
+    }
 
     func connect() async {
         screen = .connecting

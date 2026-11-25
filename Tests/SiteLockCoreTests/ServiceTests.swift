@@ -73,6 +73,40 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(send(h, .hello, password: nil).initialized, true)
     }
 
+    func testStatusWithoutPasswordShowsOnlyCountsAndActiveUnblocks() {
+        let state = BlockState(domains: ["a.com", "b.com", "c.com"],
+                               unblocks: ["a.com": t0.addingTimeInterval(60), "b.com": t0.addingTimeInterval(-60)],
+                               browsers: [chrome])
+        let h = Harness(state: state)
+        let r = send(h, .status, password: nil)
+        XCTAssertTrue(r.ok)
+        XCTAssertNil(r.state)
+        XCTAssertEqual(r.status, Status(domainCount: 3, browsers: [chrome],
+                                        unblocks: ["a.com": t0.addingTimeInterval(60)], initialized: true))
+        XCTAssertEqual(send(Harness(password: nil), .status, password: nil).status?.initialized, false)
+        XCTAssertTrue(h.savedStates.isEmpty)
+    }
+
+    func testReblockNowWithoutPasswordEnforces() {
+        let h = Harness(state: BlockState(domains: ["a.com"], unblocks: ["a.com": t0.addingTimeInterval(600)]))
+        let r = send(h, .reblockNow, domain: "a.com", password: nil)
+        XCTAssertTrue(r.ok)
+        XCTAssertNil(r.state)
+        XCTAssertEqual(h.savedStates.count, 1)
+        XCTAssertEqual(h.savedStates[0].unblocks, [:])
+        XCTAssertEqual(h.enforceCalls.count, 1)
+        XCTAssertTrue(h.enforceCalls[0].changed)
+    }
+
+    func testReblockNowOfABlockedOrExpiredDomainFailsWithoutSaving() {
+        let h = Harness(state: BlockState(domains: ["a.com", "b.com"], unblocks: ["b.com": t0.addingTimeInterval(-1)]))
+        XCTAssertFalse(send(h, .reblockNow, domain: "a.com", password: nil).ok)
+        XCTAssertFalse(send(h, .reblockNow, domain: "b.com", password: nil).ok)
+        XCTAssertFalse(send(h, .reblockNow, domain: "zzz.com", password: nil).ok)
+        XCTAssertTrue(h.savedStates.isEmpty)
+        XCTAssertTrue(h.enforceCalls.isEmpty)
+    }
+
     func testUnreadablePasswordCountsAsInitializedAndBlocksSetup() {
         let h = Harness(password: nil, passwordUnreadable: true)
         XCTAssertEqual(send(h, .hello, password: nil).initialized, true)

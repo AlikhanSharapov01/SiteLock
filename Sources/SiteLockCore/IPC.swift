@@ -2,7 +2,7 @@ import Foundation
 
 /// Version of the app and the daemon (kept equal to CFBundleShortVersionString in Resources/Info.plist).
 public enum SiteLockVersion {
-    public static let current = "1.3.1"
+    public static let current = "1.4.0"
 
     /// True if `candidate` (e.g. "1.10.0" or "v1.10.0") is a later version than `base`.
     /// Compares dot-separated numbers; missing parts count as 0.
@@ -45,6 +45,8 @@ public struct Request: Codable, Equatable, Sendable {
         case changePassword // `password` is the current one, `newPassword` replaces it
         case setBrowser     // turn enforcement in `browser` (bundle id) on or off (`enabled`)
         case importDomains  // add the raw entries in `domains` in one change
+        case status         // -> `status`, no auth
+        case reblockNow     // end the temporary unblock of `domain` early, no auth (only tightens blocking)
     }
 
     public var command: Command
@@ -82,6 +84,8 @@ public struct Response: Codable, Equatable, Sendable {
     public var version: String? = nil
     /// Only for `importDomains`.
     public var importReport: ImportReport? = nil
+    /// Only for `status`.
+    public var status: Status? = nil
 
     public init(ok: Bool, error: String? = nil, initialized: Bool? = nil, state: BlockState? = nil,
                 quitBrowsers: [String]? = nil) {
@@ -93,6 +97,23 @@ public struct Response: Codable, Equatable, Sendable {
     }
 
     public static func failure(_ message: String) -> Response { Response(ok: false, error: message) }
+}
+
+/// What the daemon tells anyone who connects, without the password. No domain names.
+public struct Status: Codable, Equatable, Sendable {
+    public var domainCount: Int
+    /// Bundle ids of the browsers SiteLock enforces on.
+    public var browsers: [String]
+    /// Active temporary unblocks only (domain -> expiry).
+    public var unblocks: [String: Date]
+    public var initialized: Bool
+
+    public init(domainCount: Int, browsers: [String], unblocks: [String: Date], initialized: Bool) {
+        self.domainCount = domainCount
+        self.browsers = browsers
+        self.unblocks = unblocks
+        self.initialized = initialized
+    }
 }
 
 public enum Wire {
