@@ -15,24 +15,26 @@ with admin rights on the Mac can still remove it (see [Known limitations](#known
   policy back if it is deleted or edited.
 - The SiteLock app is only needed when you want to change the list.
 
-Requirements: macOS 13 or later, Firefox; to build, Xcode or the Command Line Tools
-(`xcode-select --install`). Apple silicon and Intel Macs are both supported
-(universal binary).
+Requirements: macOS 13 or later and Firefox. One universal app for Apple silicon and Intel
+Macs; nothing else to install.
 
 ## Install
 
+Paste into Terminal (downloads the latest release into /Applications and opens it):
+
 ```bash
-git clone https://github.com/AlikhanSharapov01/SiteLock.git
-cd SiteLock
-./scripts/build.sh                     # as your normal user; builds ./build/SiteLock.app
-ditto build/SiteLock.app /Applications/SiteLock.app
+curl -fsSL https://github.com/AlikhanSharapov01/SiteLock/releases/latest/download/SiteLock.zip -o /tmp/SiteLock.zip && rm -rf /Applications/SiteLock.app && ditto -x -k /tmp/SiteLock.zip /Applications && rm /tmp/SiteLock.zip && open /Applications/SiteLock.app
 ```
 
-Open **SiteLock** → **Install** (macOS asks for your administrator password once) → set your
+Or download `SiteLock.zip` from the [latest release](https://github.com/AlikhanSharapov01/SiteLock/releases/latest),
+unzip it and drag **SiteLock** to Applications (see [Gatekeeper](#gatekeeper-no-paid-apple-developer-account)
+for the one-time "Open Anyway").
+
+Then in SiteLock: **Install** (macOS asks for your administrator password once) → set your
 SiteLock password. To update, replace the app and open it: it shows **Update** when the
 installed service is a different version; the password and the list are kept.
 
-Without the app's button, the same works in Terminal:
+The same command updates SiteLock. Without the app's button, installing also works in Terminal:
 `sudo /Applications/SiteLock.app/Contents/MacOS/sitelockd install`.
 
 SiteLock.app carries everything; installing puts only these on the system:
@@ -52,12 +54,12 @@ not a SiteLock popup.
 
 ### Gatekeeper (no paid Apple Developer account)
 
-SiteLock is not notarized; binaries are ad-hoc signed by `build.sh`. Because you build it
-yourself, the files carry no quarantine flag and Gatekeeper does not block them. If you copy a
-built `SiteLock.app` from somewhere else (download, AirDrop) and macOS says it "cannot be opened":
+SiteLock is ad-hoc signed, not notarized. Files fetched with `curl` (the command above) or built
+yourself carry no quarantine flag, so Gatekeeper does not ask. An app downloaded in a browser
+does carry it; on first open macOS says it cannot verify the app. Once:
 
-- Right-click (Control-click) the app → **Open** → **Open**, or
-- System Settings → Privacy & Security → **Open Anyway**, or
+- System Settings → Privacy & Security → **Open Anyway** (macOS 15 and later), or right-click
+  the app → **Open** → **Open** (macOS 13–14), or
 - `xattr -dr com.apple.quarantine /Applications/SiteLock.app`.
 
 ## Use
@@ -249,6 +251,20 @@ Run after installing. Expected results in *italics*.
 
 ## Development
 
+Build from source (needs Xcode or the Command Line Tools, `xcode-select --install`):
+
+```bash
+git clone https://github.com/AlikhanSharapov01/SiteLock.git
+cd SiteLock
+./scripts/build.sh                     # as your normal user; builds ./build/SiteLock.app
+ditto build/SiteLock.app /Applications/SiteLock.app
+```
+
+Release: bump `SiteLockVersion.current` and `CFBundleShortVersionString` in `Resources/Info.plist`
+(a test keeps them equal), merge, then push a tag `vX.Y.Z` on `main`. CI builds, checks the tag
+against the app version and publishes `SiteLock.zip` as the release asset the install command
+downloads.
+
 The app icon is drawn by `scripts/make-icon.py` (Pillow) into `Resources/AppIcon.icns`; the build
 only copies the committed `.icns`. Re-run the script after changing the drawing.
 
@@ -265,5 +281,5 @@ docker run --rm -v "$PWD":/src -w /src swift:6.0-noble swift test --build-path /
 ```
 
 CI: `.github/workflows/macos.yml` runs the tests, the universal build, `lipo` checks and
-`codesign --verify` on a macOS runner. Start it from the Actions tab (*Run workflow*). It also
-runs on pull requests.
+`codesign --verify` on a macOS runner, on pull requests, version tags and manual runs (Actions tab,
+*Run workflow*).
