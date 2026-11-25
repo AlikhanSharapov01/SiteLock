@@ -6,8 +6,9 @@ with admin rights on the Mac can still remove it (see [Known limitations](#known
 
 - Your own SiteLock password (not the Mac login password). Only a salted PBKDF2 hash is stored,
   in a root-only directory.
-- Add or remove any number of domains. Each one is blocked together with all its subdomains
-  (`instagram.com` blocks `instagram.com`, `www.instagram.com`, `m.instagram.com`, …).
+- Add or remove any number of sites. An entry blocks that host and all its subdomains, never its
+  parent or siblings: `youtube.com` blocks `www.youtube.com` and `music.youtube.com`, while
+  `www.youtube.com` blocks YouTube but leaves `music.youtube.com` open.
 - Unblock a domain for N minutes (for example LinkedIn for 15 minutes); it is blocked again
   automatically when the time is up.
 - A background service starts at boot, has no Dock icon and no popups, and puts the Firefox
@@ -56,8 +57,15 @@ built `SiteLock.app` from somewhere else (download, AirDrop) and macOS says it "
 ## Use
 
 1. Open SiteLock and enter your SiteLock password.
-2. **Add**: type a domain (`instagram.com`, or paste a URL like `https://www.instagram.com/explore`,
-   which is reduced to `instagram.com`) and press Add.
+2. **Add**: type a host (`instagram.com`, `www.youtube.com`), or paste a URL like
+   `https://www.youtube.com/feed`, which is reduced to `www.youtube.com`, and press Add.
+   The host is kept as typed; it and its subdomains are blocked:
+
+   | Entry | Blocked | Not blocked |
+   |---|---|---|
+   | `youtube.com` | `youtube.com`, `www.youtube.com`, `music.youtube.com`, `m.youtube.com` | — |
+   | `www.youtube.com` | `www.youtube.com` (and `youtube.com`, which redirects there) | `music.youtube.com`, `m.youtube.com` |
+   | `store.google.com` | `store.google.com` | `google.com`, `mail.google.com` |
 3. **Unblock for a while**: on the row, choose *Unblock* → 5/15/30/60/120 minutes or *Custom…*
    (1 minute to 24 hours). The row shows *Unblocked until 14:35*. *Re-block now* ends it early.
 4. **Remove**: the trash button (asks for confirmation).
@@ -200,24 +208,26 @@ Run after `sudo ./install.sh`. Expected results in *italics*.
    `https://example.com` still loads.
 5. Open `about:policies`. *Status "Active"; WebsiteFilter lists `*://*.instagram.com/*`.*
 6. Open `about:config`. *Blocked.*
-7. Add `https://www.linkedin.com/feed/`. *Row shows `linkedin.com`.* LinkedIn is blocked.
-8. Unblock linkedin.com → Custom… → 2 minutes. *Firefox restarts; linkedin.com loads; row shows
+7. Add `linkedin.com`. LinkedIn is blocked.
+8. Add `https://www.youtube.com/feed`. *Row shows `www.youtube.com`.* `https://www.youtube.com`
+   and `https://youtube.com` are blocked; `https://music.youtube.com` still loads.
+9. Unblock linkedin.com → Custom… → 2 minutes. *Firefox restarts; linkedin.com loads; row shows
    "Unblocked until hh:mm".*
-9. Wait 2–3 minutes. *Firefox quits on its own; after reopening, linkedin.com is blocked; the
+10. Wait 2–3 minutes. *Firefox quits on its own; after reopening, linkedin.com is blocked; the
    app row shows "Blocked".*
-10. Unblock linkedin.com for 5 minutes, then *Re-block now*. *Firefox restarts; LinkedIn blocked.*
-11. Tamper: `sudo defaults delete /Library/Preferences/org.mozilla.firefox WebsiteFilter`, wait
+11. Unblock linkedin.com for 5 minutes, then *Re-block now*. *Firefox restarts; LinkedIn blocked.*
+12. Tamper: `sudo defaults delete /Library/Preferences/org.mozilla.firefox WebsiteFilter`, wait
     3 s, read it again. *The key is back.* `tail /var/log/sitelockd.log` shows
     "Firefox policy missing or modified; re-applying".
-12. Tamper: `sudo rm /Library/Preferences/org.mozilla.firefox.plist`, wait 3 s.
+13. Tamper: `sudo rm /Library/Preferences/org.mozilla.firefox.plist`, wait 3 s.
     *The file exists again with SiteLock's keys.*
-13. Persistence: `sudo killall sitelockd`. *`pgrep sitelockd` shows a new PID within seconds.*
-14. Reboot. *Without opening the app, instagram.com is still blocked in Firefox.*
-15. Wrong password in the app 5 times. *"Too many wrong passwords…" for 60 seconds.*
-16. Remove instagram.com. *Firefox restarts; instagram.com loads.*
-17. Update Firefox (Firefox → About Firefox) if an update is available. *Blocking still works.*
-18. `sudo ./uninstall.sh` with a wrong password. *"Wrong password. Nothing was removed."*
-19. `sudo ./uninstall.sh` with the right password, restart Firefox. *Sites load; `about:policies`
+14. Persistence: `sudo killall sitelockd`. *`pgrep sitelockd` shows a new PID within seconds.*
+15. Reboot. *Without opening the app, instagram.com is still blocked in Firefox.*
+16. Wrong password in the app 5 times. *"Too many wrong passwords…" for 60 seconds.*
+17. Remove instagram.com. *Firefox restarts; instagram.com loads.*
+18. Update Firefox (Firefox → About Firefox) if an update is available. *Blocking still works.*
+19. `sudo ./uninstall.sh` with a wrong password. *"Wrong password. Nothing was removed."*
+20. `sudo ./uninstall.sh` with the right password, restart Firefox. *Sites load; `about:policies`
     shows no active policies (unless you have others).*
 
 ## Development

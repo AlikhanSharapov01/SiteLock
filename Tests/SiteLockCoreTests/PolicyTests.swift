@@ -4,7 +4,8 @@ import XCTest
 final class DomainTests: XCTestCase {
     func testNormalizesUserInput() throws {
         XCTAssertEqual(try Domain.normalize("instagram.com"), "instagram.com")
-        XCTAssertEqual(try Domain.normalize("  https://www.Instagram.com/explore?x=1 "), "instagram.com")
+        XCTAssertEqual(try Domain.normalize("  https://www.Instagram.com/explore?x=1 "), "www.instagram.com")
+        XCTAssertEqual(try Domain.normalize("www.youtube.com"), "www.youtube.com", "www. is kept")
         XCTAssertEqual(try Domain.normalize("http://user@m.facebook.com:8080/"), "m.facebook.com")
         XCTAssertEqual(try Domain.normalize("*.reddit.com"), "reddit.com")
         XCTAssertEqual(try Domain.normalize("news.ycombinator.com."), "news.ycombinator.com")
@@ -17,6 +18,21 @@ final class DomainTests: XCTestCase {
                     "192.168.0.1", "ïnstagram.com", "exa_mple.com"] {
             XCTAssertThrowsError(try Domain.normalize(bad), "should reject \(bad)")
         }
+    }
+
+    func testEntryBlocksOnlyItsOwnHostAndSubdomains() throws {
+        // "www.youtube.com" must not cover music.youtube.com; "youtube.com" covers both.
+        XCTAssertEqual(Domain.blockPattern(for: try Domain.normalize("https://www.youtube.com/feed")),
+                       "*://*.www.youtube.com/*")
+        XCTAssertEqual(Domain.blockPattern(for: try Domain.normalize("youtube.com")), "*://*.youtube.com/*")
+        XCTAssertEqual(Domain.blockPattern(for: try Domain.normalize("store.google.com")), "*://*.store.google.com/*")
+    }
+
+    func testHostAndParentAreSeparateEntries() throws {
+        var s = BlockState()
+        try s.add(Domain.normalize("www.youtube.com"))
+        XCTAssertNoThrow(try s.add(Domain.normalize("youtube.com")))
+        XCTAssertEqual(s.domains, ["www.youtube.com", "youtube.com"])
     }
 
     func testBlockPatternCoversSubdomainsAndAllSchemes() {

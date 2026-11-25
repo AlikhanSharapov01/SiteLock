@@ -156,7 +156,8 @@ struct BlocklistView: View {
             ErrorText(message: model.error)
 
             if model.state.domains.isEmpty {
-                Text("No blocked sites yet. Add a domain above; its subdomains are blocked too.")
+                Text("No blocked sites yet. A site blocks its subdomains too: youtube.com also blocks music.youtube.com, while www.youtube.com blocks only YouTube itself.")
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
