@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SiteLockCore
 
@@ -21,6 +22,16 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { await model.connect() }
+    }
+}
+
+/// The app's own icon (Resources/AppIcon.icns), so the windows are recognisably SiteLock.
+struct AppIconView: View {
+    var body: some View {
+        Image(nsImage: NSApplication.shared.applicationIconImage)
+            .resizable()
+            .frame(width: 64, height: 64)
+            .accessibilityHidden(true)
     }
 }
 
@@ -69,8 +80,11 @@ struct SetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Set your SiteLock password")
-                .font(.title2)
+            HStack(spacing: 12) {
+                AppIconView()
+                Text("Set your SiteLock password")
+                    .font(.title2)
+            }
             Text("Use a new password, not your Mac login password. You will need it to change the blocklist, unblock a site or uninstall SiteLock. At least \(PasswordHasher.minimumLength) characters.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -98,9 +112,7 @@ struct UnlockView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "lock")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
+            AppIconView()
             Text("Enter your SiteLock password")
                 .font(.title2)
             SecureField("Password", text: $password)
@@ -129,6 +141,7 @@ struct BlocklistView: View {
     @State private var newDomain = ""
     @State private var customUnblockDomain: String?
     @State private var removeDomain: String?
+    @State private var changingPassword = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -143,7 +156,8 @@ struct BlocklistView: View {
             ErrorText(message: model.error)
 
             if model.state.domains.isEmpty {
-                Text("No blocked sites yet. Add a domain above; its subdomains are blocked too.")
+                Text("No blocked sites yet. A site blocks its subdomains too: youtube.com also blocks music.youtube.com, while www.youtube.com blocks only YouTube itself.")
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -168,6 +182,7 @@ struct BlocklistView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 if model.busy { ProgressView().controlSize(.small) }
+                Button("Change Password…") { changingPassword = true }
                 Button("Lock") { model.lock() }
             }
         }
@@ -179,6 +194,7 @@ struct BlocklistView: View {
                 Task { await model.unblock(item.id, minutes: minutes) }
             }
         }
+        .sheet(isPresented: $changingPassword) { ChangePasswordSheet() }
         .confirmationDialog("Remove \(removeDomain ?? "") from the blocklist?",
                             isPresented: Binding(get: { removeDomain != nil }, set: { if !$0 { removeDomain = nil } })) {
             Button("Remove", role: .destructive) {
@@ -281,5 +297,46 @@ struct CustomUnblockSheet: View {
         }
         .padding()
         .frame(width: 300)
+    }
+}
+
+struct ChangePasswordSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var current = ""
+    @State private var new = ""
+    @State private var confirmation = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Change SiteLock password")
+                .font(.headline)
+            SecureField("Current password", text: $current)
+            SecureField("New password (at least \(PasswordHasher.minimumLength) characters)", text: $new)
+            SecureField("Confirm new password", text: $confirmation)
+            ErrorText(message: model.error)
+            HStack {
+                Spacer()
+                if model.busy { ProgressView().controlSize(.small) }
+                Button("Cancel", role: .cancel) {
+                    model.error = nil
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                Button("Change Password") {
+                    Task {
+                        if await model.changePassword(current: current, new: new, confirmation: confirmation) {
+                            dismiss()
+                        }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(model.busy || current.isEmpty || new.isEmpty || confirmation.isEmpty)
+            }
+        }
+        .textFieldStyle(.roundedBorder)
+        .padding()
+        .frame(width: 340)
+        .onAppear { model.error = nil }
     }
 }

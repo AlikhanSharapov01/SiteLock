@@ -22,10 +22,11 @@ X86=$(bin x86_64)
 
 rm -rf build
 APP=build/SiteLock.app
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 lipo -create "$ARM/sitelockd" "$X86/sitelockd" -output build/sitelockd
 lipo -create "$ARM/SiteLock" "$X86/SiteLock" -output "$APP/Contents/MacOS/SiteLock"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # Ad-hoc signatures: no Apple Developer account needed; Apple silicon requires a signature to run.
 codesign --force --sign - --identifier local.sitelock.daemon build/sitelockd

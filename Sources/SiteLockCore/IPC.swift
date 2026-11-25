@@ -16,18 +16,22 @@ public struct Request: Codable, Equatable, Sendable {
         case setup      // first launch: set the password (only while none is stored)
         case list       // -> domains + unblocks
         case add, remove, unblock, reblock
+        case changePassword // `password` is the current one, `newPassword` replaces it
     }
 
     public var command: Command
     public var password: String?
     public var domain: String?
     public var minutes: Int?
+    public var newPassword: String?
 
-    public init(_ command: Command, password: String? = nil, domain: String? = nil, minutes: Int? = nil) {
+    public init(_ command: Command, password: String? = nil, domain: String? = nil, minutes: Int? = nil,
+                newPassword: String? = nil) {
         self.command = command
         self.password = password
         self.domain = domain
         self.minutes = minutes
+        self.newPassword = newPassword
     }
 }
 

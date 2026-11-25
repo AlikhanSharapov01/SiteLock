@@ -13,8 +13,10 @@ public enum DomainError: Error, Equatable, CustomStringConvertible {
 }
 
 public enum Domain {
-    /// Turns user input such as "https://www.Instagram.com/explore" into "instagram.com".
-    /// A leading "www." is dropped because blocking covers all subdomains anyway.
+    /// Turns user input such as "https://www.YouTube.com/feed" into the host "www.youtube.com".
+    /// The host is kept as typed (no "www." stripping): an entry blocks that host and its
+    /// subdomains only, so "www.youtube.com" leaves "music.youtube.com" alone while
+    /// "youtube.com" blocks both (same rule as the "Domain Blocker" Firefox add-on).
     public static func normalize(_ input: String) throws -> String {
         var s = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if s.isEmpty { throw DomainError.empty }
@@ -24,7 +26,6 @@ public enum Domain {
         if let colon = s.firstIndex(of: ":") { s = String(s[..<colon]) }
         while s.hasSuffix(".") { s.removeLast() }
         if s.hasPrefix("*.") { s.removeFirst(2) }
-        if s.hasPrefix("www.") { s.removeFirst(4) }
         guard isValid(s) else { throw DomainError.invalid(input.trimmingCharacters(in: .whitespaces)) }
         return s
     }
@@ -43,8 +44,8 @@ public enum Domain {
         return !labels.last!.allSatisfy(\.isNumber)
     }
 
-    /// Firefox WebsiteFilter match pattern. "*." in a match pattern matches the
-    /// domain itself and every subdomain, on any scheme (http/https/ws/wss).
+    /// Firefox WebsiteFilter match pattern. "*." in a match pattern matches the host itself and
+    /// every subdomain of it (never its parent or siblings), on any scheme (http/https/ws/wss).
     public static func blockPattern(for domain: String) -> String {
         "*://*.\(domain)/*"
     }

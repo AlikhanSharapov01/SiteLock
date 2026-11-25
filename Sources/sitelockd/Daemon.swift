@@ -96,13 +96,14 @@ final class Daemon {
             break
         }
         if let error = authenticate(request.password) { return .failure(error) }
+        if request.command == .changePassword { return changePassword(request.newPassword ?? "") }
 
         let now = Date()
         var next = state
         do {
             let domain = { try Domain.normalize(request.domain ?? "") }
             switch request.command {
-            case .list, .hello, .setup: break
+            case .list, .hello, .setup, .changePassword: break
             case .add: try next.add(domain())
             case .remove: try next.remove(domain())
             case .unblock: try next.unblock(domain(), minutes: request.minutes ?? 0, now: now)
@@ -129,6 +130,19 @@ final class Daemon {
             password = record
             log("password set")
             return Response(ok: true, initialized: true, state: state)
+        } catch {
+            return .failure("\(error)")
+        }
+    }
+
+    /// The caller is already authenticated with the current password.
+    private func changePassword(_ newPassword: String) -> Response {
+        do {
+            let record = try PasswordHasher.makeRecord(password: newPassword)
+            try Storage.save(record, to: Paths.passwordFile)
+            password = record
+            log("password changed")
+            return Response(ok: true, state: state)
         } catch {
             return .failure("\(error)")
         }

@@ -23,5 +23,7 @@ jobs:
           lipo build/sitelockd -verify_arch arm64 x86_64
           lipo build/SiteLock.app/Contents/MacOS/SiteLock -verify_arch arm64 x86_64
           codesign --verify --verbose build/sitelockd build/SiteLock.app
+          test -s build/SiteLock.app/Contents/Resources/AppIcon.icns
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" build/SiteLock.app/Contents/Info.plist
       - name: Shell scripts parse
         run: for f in install.sh uninstall.sh scripts/build.sh; do bash -n "$f"; done
