@@ -111,7 +111,7 @@ final class AppModel: ObservableObject {
         updateCheck = .checking
         struct Release: Decodable { let tag_name: String }
         do {
-            var request = URLRequest(url: Self.latestReleaseAPI)
+            var request = URLRequest(url: Self.latestReleaseAPI, timeoutInterval: 20)
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw UpdateError("GitHub did not answer") }
@@ -129,7 +129,8 @@ final class AppModel: ObservableObject {
         updateCheck = .installing
         do {
             let fm = FileManager.default
-            let (zip, response) = try await URLSession.shared.download(from: Self.latestDownload)
+            let (zip, response) = try await URLSession.shared.download(
+                for: URLRequest(url: Self.latestDownload, timeoutInterval: 60))
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw UpdateError("download failed") }
             let work = fm.temporaryDirectory.appendingPathComponent("SiteLockUpdate-\(UUID().uuidString)")
             try fm.createDirectory(at: work, withIntermediateDirectories: true)
@@ -152,7 +153,10 @@ final class AppModel: ObservableObject {
             relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
             relaunch.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", current.path]
             try relaunch.run()
-            NSApplication.shared.terminate(nil)
+            // Quit at once: the new copy is already in place, nothing needs saving, and
+            // NSApplication.terminate can be postponed (e.g. while a sheet is open), which left
+            // the update stuck on "Downloading and installing…".
+            exit(0)
         } catch {
             updateCheck = .failed("Update failed: \(error)")
         }
