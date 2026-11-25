@@ -7,6 +7,18 @@ public protocol PasswordHashing {
     func verify(password: String, against record: PasswordRecord) throws -> Bool
 }
 
+/// Who is talking to the daemon: the uid of the socket peer and whether it is an administrator
+/// of the Mac (the daemon only determines that for `setup`).
+public struct Client: Equatable, Sendable {
+    public var uid: UInt32
+    public var isAdmin: Bool
+
+    public init(uid: UInt32, isAdmin: Bool) {
+        self.uid = uid
+        self.isAdmin = isAdmin
+    }
+}
+
 /// The daemon's request handling and periodic work, free of sockets, files, browsers and
 /// timers: all of those are injected. Not thread-safe; the caller serializes every call.
 public final class SiteLockService {
@@ -62,18 +74,21 @@ public final class SiteLockService {
 
     // MARK: - Requests
 
-    public func handle(_ request: Request, now: Date) -> Response {
+    public func handle(_ request: Request, from client: Client, now: Date) -> Response {
         switch request.command {
         case .hello:
             var response = Response(ok: true, initialized: password != nil || passwordUnreadable)
             response.version = SiteLockVersion.current
             return response
         case .setup:
+            guard client.isAdmin else {
+                return .failure("Only an administrator of this Mac can set the SiteLock password.")
+            }
             return setup(request.password ?? "")
         default:
             break
         }
-        if let error = authenticate(request.password, now: now) { return .failure(error) }
+        if let error = authenticate(request.password, uid: client.uid, now: now) { return .failure(error) }
         if request.command == .uninstall {
             log("uninstall requested from the app")
             uninstall()
@@ -152,15 +167,15 @@ public final class SiteLockService {
     }
 
     /// Nil on success, otherwise a message for the user.
-    private func authenticate(_ candidate: String?, now: Date) -> String? {
+    private func authenticate(_ candidate: String?, uid: UInt32, now: Date) -> String? {
         guard let record = password else {
             return passwordUnreadable ? "The password file cannot be read; see the system log (subsystem local.sitelock)" : "No password set yet"
         }
-        if let wait = throttle.lockedFor(now: now) {
-            return "Too many wrong passwords. Try again in \(Int(wait.rounded(.up))) s"
+        if let wait = throttle.lockedFor(uid: uid, now: now) {
+            return AuthThrottle.message(waiting: wait)
         }
         let ok = (try? hasher.verify(password: candidate ?? "", against: record)) ?? false
-        throttle.record(success: ok, now: now)
+        throttle.record(uid: uid, success: ok, now: now)
         return ok ? nil : "Wrong password"
     }
 }

@@ -112,20 +112,41 @@ final class AuthThrottleTests: XCTestCase {
 
     func testLocksAfterRepeatedFailuresAndUnlocksAfterTimeout() {
         var th = AuthThrottle(maxFailures: 3, lockout: 60)
-        th.record(success: false, now: t0)
-        th.record(success: false, now: t0)
-        XCTAssertNil(th.lockedFor(now: t0))
-        th.record(success: false, now: t0)
-        XCTAssertEqual(th.lockedFor(now: t0 + 10), 50)
-        XCTAssertNil(th.lockedFor(now: t0 + 60))
+        th.record(uid: 1, success: false, now: t0)
+        th.record(uid: 1, success: false, now: t0)
+        XCTAssertNil(th.lockedFor(uid: 1, now: t0))
+        th.record(uid: 1, success: false, now: t0)
+        XCTAssertEqual(th.lockedFor(uid: 1, now: t0 + 10), 50)
+        XCTAssertNil(th.lockedFor(uid: 1, now: t0 + 60))
+    }
+
+    func testLockoutGrowsIsCappedAndResetsPerUid() {
+        var th = AuthThrottle()
+        var now = t0
+        for expected in [60.0, 120, 240, 480, 960, 1920, 3600, 3600] {
+            for _ in 0..<5 { th.record(uid: 7, success: false, now: now) }
+            XCTAssertEqual(th.lockedFor(uid: 7, now: now), expected)
+            XCTAssertNil(th.lockedFor(uid: 8, now: now))
+            now += expected
+            XCTAssertNil(th.lockedFor(uid: 7, now: now))
+        }
+        th.record(uid: 7, success: true, now: now)
+        for _ in 0..<5 { th.record(uid: 7, success: false, now: now) }
+        XCTAssertEqual(th.lockedFor(uid: 7, now: now), 60)
+    }
+
+    func testMessageUsesMinutesFromTwoMinutes() {
+        XCTAssertEqual(AuthThrottle.message(waiting: 59.2), "Too many wrong passwords. Try again in 60 s")
+        XCTAssertEqual(AuthThrottle.message(waiting: 120), "Too many wrong passwords. Try again in 2 min")
+        XCTAssertEqual(AuthThrottle.message(waiting: 3600), "Too many wrong passwords. Try again in 60 min")
     }
 
     func testSuccessResetsFailureCount() {
         var th = AuthThrottle(maxFailures: 2, lockout: 60)
-        th.record(success: false, now: t0)
-        th.record(success: true, now: t0)
-        th.record(success: false, now: t0)
-        XCTAssertNil(th.lockedFor(now: t0))
+        th.record(uid: 1, success: false, now: t0)
+        th.record(uid: 1, success: true, now: t0)
+        th.record(uid: 1, success: false, now: t0)
+        XCTAssertNil(th.lockedFor(uid: 1, now: t0))
     }
 }
 

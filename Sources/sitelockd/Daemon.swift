@@ -101,11 +101,33 @@ final class Daemon {
         let response: Response
         if let line = UnixSocket.readLine(fd, deadline: Date().addingTimeInterval(5)),
            let request = try? Wire.decode(Request.self, from: line) {
-            response = queue.sync { service.handle(request, now: Date()) }
+            // Only `setup` needs to know whether the caller is an admin (it spawns a tool).
+            let client = Self.client(of: fd, needsAdmin: request.command == .setup)
+            response = queue.sync { service.handle(request, from: client, now: Date()) }
         } else {
             response = .failure("Malformed request")
         }
         if let data = try? Wire.encode(response) { _ = UnixSocket.writeAll(fd, data) }
+    }
+}
+
+extension Daemon {
+    /// The peer of the connected socket `fd`. If its uid cannot be read, it is uid `UInt32.max`
+    /// and not an admin.
+    static func client(of fd: Int32, needsAdmin: Bool) -> Client {
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        guard getpeereid(fd, &uid, &gid) == 0 else { return Client(uid: UInt32.max, isAdmin: false) }
+        return Client(uid: uid, isAdmin: needsAdmin && isAdmin(uid: uid))
+    }
+
+    /// Root, or a member of the `admin` group.
+    static func isAdmin(uid: uid_t) -> Bool {
+        if uid == 0 { return true }
+        guard let pw = getpwuid(uid), let name = pw.pointee.pw_name else { return false }
+        let output = runToolOutput("/usr/bin/dsmemberutil",
+                                   ["checkmembership", "-U", String(cString: name), "-G", "admin"])
+        return output?.contains("user is a member of the group") ?? false
     }
 }
 

@@ -107,35 +107,55 @@ public enum Wire {
     }
 }
 
-/// Slows down password guessing over the world-connectable socket:
-/// after `maxFailures` wrong passwords in a row, all attempts are refused for `lockout`.
+/// Slows down password guessing over the world-connectable socket, separately per client uid
+/// (one user cannot lock another out). After `maxFailures` wrong passwords in a row a uid is
+/// refused for `lockout`; every further lockout without a success in between doubles that, up to
+/// `maxLockout`. A correct password resets the uid.
 public struct AuthThrottle: Sendable {
     public let maxFailures: Int
     public let lockout: TimeInterval
-    private var failures = 0
-    private var lockedUntil: Date?
+    public let maxLockout: TimeInterval
 
-    public init(maxFailures: Int = 5, lockout: TimeInterval = 60) {
+    private struct Entry: Sendable {
+        var failures = 0
+        var lockouts = 0
+        var lockedUntil: Date?
+    }
+    private var entries: [UInt32: Entry] = [:]
+
+    public init(maxFailures: Int = 5, lockout: TimeInterval = 60, maxLockout: TimeInterval = 3600) {
         self.maxFailures = maxFailures
         self.lockout = lockout
+        self.maxLockout = maxLockout
     }
 
-    /// Seconds left in the lockout, or nil if an attempt is allowed.
-    public func lockedFor(now: Date) -> TimeInterval? {
-        guard let until = lockedUntil, until > now else { return nil }
+    /// Seconds left in the lockout of `uid`, or nil if an attempt is allowed.
+    public func lockedFor(uid: UInt32, now: Date) -> TimeInterval? {
+        guard let until = entries[uid]?.lockedUntil, until > now else { return nil }
         return until.timeIntervalSince(now)
     }
 
-    public mutating func record(success: Bool, now: Date) {
+    public mutating func record(uid: UInt32, success: Bool, now: Date) {
         if success {
-            failures = 0
-            lockedUntil = nil
+            entries[uid] = nil
             return
         }
-        failures += 1
-        if failures >= maxFailures {
-            failures = 0
-            lockedUntil = now.addingTimeInterval(lockout)
+        var entry = entries[uid] ?? Entry()
+        entry.failures += 1
+        if entry.failures >= maxFailures {
+            var duration = lockout
+            for _ in 0..<entry.lockouts where duration < maxLockout { duration *= 2 }
+            entry.failures = 0
+            entry.lockouts += 1
+            entry.lockedUntil = now.addingTimeInterval(min(duration, maxLockout))
         }
+        entries[uid] = entry
+    }
+
+    /// "Too many wrong passwords. Try again in 45 s" (in minutes from 120 s on).
+    public static func message(waiting seconds: TimeInterval) -> String {
+        let s = Int(seconds.rounded(.up))
+        let amount = s >= 120 ? "\((s + 59) / 60) min" : "\(s) s"
+        return "Too many wrong passwords. Try again in \(amount)"
     }
 }

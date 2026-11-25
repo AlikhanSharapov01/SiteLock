@@ -30,6 +30,20 @@ func runTool(_ tool: String, _ args: [String]) -> Int32 {
     return p.terminationStatus
 }
 
+/// Runs a command-line tool and returns its standard output (nil if it could not start).
+func runToolOutput(_ tool: String, _ args: [String]) -> String? {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: tool)
+    p.arguments = args
+    let pipe = Pipe()
+    p.standardOutput = pipe
+    p.standardError = FileHandle.nullDevice
+    do { try p.run() } catch { log("\(tool) failed: \(error)"); return nil }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    return String(decoding: data, as: UTF8.self)
+}
+
 /// JSON files under /Library/Application Support/SiteLock (root:wheel, dir 0700, files 0600).
 enum Storage {
     static func ensureDataDirectory() throws {
