@@ -338,6 +338,7 @@ struct BlocklistView: View {
                     Button("Check for Updates…") { model.showingUpdates = true }
                     Button("Browsers…") { choosingBrowsers = true }
                     Button("Import List…") { Task { await model.importList() } }
+                        .disabled(model.busy)
                     Button("Export List…") { model.exportList() }
                     Button("Change Password…") { changingPassword = true }
                     Divider()

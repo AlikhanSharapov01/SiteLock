@@ -74,6 +74,31 @@ final class ImportTests: XCTestCase {
         XCTAssertNil(r.response.state)
     }
 
+    func testDuplicateOfOverLimitEntryCountsAsOverLimit() {
+        var s = BlockState(domains: (0..<BlockState.maxDomains).map { "site\($0).com" })
+        let report = s.importDomains(["new.com", "new.com", "site1.com"])
+        XCTAssertEqual(report.added, 0)
+        XCTAssertEqual(report.overLimit, 2)
+        XCTAssertEqual(report.alreadyInList, 1)
+    }
+
+    func testFailingSaveLeavesStateUnchanged() {
+        let h = ImportHarness(state: BlockState(domains: ["a.com"]))
+        h.failSaves = true
+        let response = h.service.handle(importRequest(["b.com"]), from: Client(uid: 501, isAdmin: true), now: t0)
+        XCTAssertFalse(response.ok)
+        XCTAssertNotNil(response.error)
+        XCTAssertEqual(h.service.state.domains, ["a.com"])
+        XCTAssertTrue(h.enforces.isEmpty)
+    }
+
+    func testOldJSONWithoutNewKeysStillDecodes() throws {
+        let request = try Wire.decode(Request.self, from: Data(#"{"command":"add","domain":"a.com","password":"x"}"#.utf8))
+        XCTAssertNil(request.domains)
+        let response = try Wire.decode(Response.self, from: Data(#"{"ok":true}"#.utf8))
+        XCTAssertNil(response.importReport)
+    }
+
     func testRequestRoundTrip() throws {
         var request = Request(.importDomains, password: "pw")
         request.domains = ["a.com"]
@@ -91,8 +116,11 @@ private struct ImportHasher: PasswordHashing {
     }
 }
 
+private struct ImportDiskFull: Error {}
+
 private final class ImportHarness {
     var saves = 0
+    var failSaves = false
     var enforces: [Bool] = []
     private(set) var service: SiteLockService!
 
@@ -100,7 +128,10 @@ private final class ImportHarness {
         let record = try? ImportHasher().makeRecord(password: "secret1")
         service = SiteLockService(
             state: state, password: record, hasher: ImportHasher(),
-            saveState: { [unowned self] _ in saves += 1 },
+            saveState: { [unowned self] _ in
+                if failSaves { throw ImportDiskFull() }
+                saves += 1
+            },
             savePassword: { _ in },
             enforce: { [unowned self] changed, _ in enforces.append(changed); return ["org.mozilla.firefox"] },
             uninstall: {})

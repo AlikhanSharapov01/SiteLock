@@ -45,8 +45,9 @@ extension BlockState {
                 if report.invalidEntries.count < ImportReport.maxInvalidListed { report.invalidEntries.append(line) }
                 continue
             }
-            guard seen.insert(domain).inserted else { report.alreadyInList += 1; continue }
+            guard !seen.contains(domain) else { report.alreadyInList += 1; continue }
             if domains.count + fresh.count >= Self.maxDomains { report.overLimit += 1; continue }
+            seen.insert(domain)
             fresh.append(domain)
         }
         for domain in fresh { try? add(domain) }
