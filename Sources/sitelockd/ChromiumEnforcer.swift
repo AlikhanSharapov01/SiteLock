@@ -25,8 +25,8 @@ final class ChromiumEnforcer: Enforcer {
             if !changed { log("\(browser.name) policy missing or modified; re-applying") }
             write(policy)
         }
-        // Chromium reads policies at startup (and on its own schedule), so restart it on a change.
-        return changed ? [browser.id] : []
+        // Chromium watches the managed preferences and applies a changed policy live: no restart.
+        return []
     }
 
     /// Removes the keys SiteLock manages, and the file if nothing else is in it.

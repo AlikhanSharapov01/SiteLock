@@ -324,9 +324,11 @@ struct BlocklistView: View {
             }
 
             HStack {
-                Text("Changes quit and reopen the selected browsers so they load the new list.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if model.state.browsers.contains(Browser.firefoxID) {
+                    Text("Changes restart Firefox to load the new list.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 if model.busy { ProgressView().controlSize(.small) }
                 Menu {
@@ -397,7 +399,7 @@ struct BrowsersSheet: View {
                     }
                 }
             }
-            Text("Turning a browser on or off restarts it.")
+            Text("Turning Firefox on or off restarts it. Other browsers are not restarted.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             ErrorText(message: model.error)

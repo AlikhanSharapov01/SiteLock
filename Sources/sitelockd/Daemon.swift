@@ -62,14 +62,15 @@ final class Daemon {
 
     /// Applies the state in every browser (or only `bundleID`). Returns the bundle ids of the
     /// browsers that were quit, all of them in one pass. With `bundleID` and `changed == false`
-    /// the browser was just switched off: it is quit so it drops the policy.
+    /// the browser was just switched off: it is quit so it drops the policy (Firefox only).
     private func enforce(changed: Bool, only bundleID: String?) -> [String] {
         let now = Date()
         var toQuit: [String] = []
         for enforcer in enforcers where bundleID == nil || enforcer.bundleID == bundleID {
             toQuit += enforcer.enforce(service.state, now: now, changed: changed)
         }
-        if let bundleID, !changed { toQuit = [bundleID] }
+        // Only Firefox needs a restart to drop the policy; Chromium applies it live.
+        if let bundleID, !changed, bundleID == Browser.firefoxID { toQuit = [bundleID] }
         return quit(toQuit)
     }
 

@@ -13,6 +13,6 @@ public protocol Enforcer {
     /// Applies `state` at `now`. `changed` is true when the effective blocklist differs from
     /// the previous call (e.g. after add/unblock/re-block), false for a periodic re-check.
     /// Returns the bundle ids of the browsers that must be quit (and reopened) to load the new
-    /// policy; the caller quits them.
+    /// policy; the caller quits them. Only Firefox needs this; Chromium applies policy changes live.
     func enforce(_ state: BlockState, now: Date, changed: Bool) -> [String]
 }
