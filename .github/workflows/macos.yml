@@ -32,8 +32,10 @@ jobs:
           test "$("$APP/Contents/MacOS/sitelockd" version)" = "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
           test -s build/SiteLock.app/Contents/Resources/AppIcon.icns
           /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" build/SiteLock.app/Contents/Info.plist
-      - name: Build script parses
-        run: bash -n scripts/build.sh
+      - name: Scripts parse
+        run: bash -n scripts/build.sh && bash -n scripts/e2e.sh
+      - name: End-to-end on this runner (install, policies, Chrome blocking, uninstall)
+        run: ./scripts/e2e.sh
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         env:

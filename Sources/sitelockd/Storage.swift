@@ -10,6 +10,13 @@ func log(_ message: String) {
     logger.log("\(message, privacy: .public)")
 }
 
+/// Makes cfprefsd drop its cached preferences after a policy plist was written or deleted
+/// directly. Without this, browsers keep seeing a deleted Managed Preferences policy until the
+/// next reboot (seen in CI). cfprefsd is restarted on demand by launchd.
+func reloadPreferencesCache() {
+    runTool("/usr/bin/killall", ["cfprefsd"])
+}
+
 /// Runs a command-line tool and returns its exit status (-1 if it could not start).
 @discardableResult
 func runTool(_ tool: String, _ args: [String]) -> Int32 {
