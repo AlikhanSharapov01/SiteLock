@@ -62,8 +62,22 @@ final class Daemon {
         enforce(now: now, changed: expired)
     }
 
-    private func enforce(now: Date, changed: Bool) {
-        for enforcer in enforcers { enforcer.enforce(state, now: now, changed: changed) }
+    /// Applies the state in every browser (or only `bundleID`). Returns the bundle ids of the
+    /// browsers that were quit, all of them in one pass.
+    @discardableResult
+    private func enforce(now: Date, changed: Bool, only bundleID: String? = nil) -> [String] {
+        var toQuit: [String] = []
+        for enforcer in enforcers where bundleID == nil || enforcer.bundleID == bundleID {
+            toQuit += enforcer.enforce(state, now: now, changed: changed)
+        }
+        return quit(toQuit)
+    }
+
+    /// Quits the given browsers together; returns the bundle ids that were running.
+    private func quit(_ bundleIDs: [String]) -> [String] {
+        let browsers = bundleIDs.compactMap { Browser.byID($0) }
+        let names = Set(BrowserProcess.quit(processNames: browsers.map(\.processName)))
+        return browsers.filter { names.contains($0.processName) }.map(\.id)
     }
 
     private func persist(_ s: BlockState) {
@@ -102,11 +116,12 @@ final class Daemon {
         if request.command == .changePassword { return changePassword(request.newPassword ?? "") }
 
         let now = Date()
+        if request.command == .setBrowser { return setBrowser(request, now: now) }
         var next = state
         do {
             let domain = { try Domain.normalize(request.domain ?? "") }
             switch request.command {
-            case .list, .hello, .setup, .changePassword, .uninstall: break
+            case .list, .hello, .setup, .changePassword, .uninstall, .setBrowser: break
             case .add: try next.add(domain())
             case .remove: try next.remove(domain())
             case .unblock: try next.unblock(domain(), minutes: request.minutes ?? 0, now: now)
@@ -119,11 +134,36 @@ final class Daemon {
         }
         let changed = next.effectiveBlocked(now: now) != state.effectiveBlocked(now: now)
         state = next
+        var quitIDs: [String] = []
         if changed {
             log("\(request.command.rawValue) \(request.domain ?? ""): applying new list")
-            enforce(now: now, changed: true)
+            quitIDs = enforce(now: now, changed: true)
         }
-        return Response(ok: true, state: state, firefoxQuit: changed)
+        return Response(ok: true, state: state, quitBrowsers: quitIDs)
+    }
+
+    /// The caller is authenticated. Turns enforcement in one browser on or off and restarts that
+    /// browser so it picks up (or drops) the policy.
+    private func setBrowser(_ request: Request, now: Date) -> Response {
+        let id = request.browser ?? ""
+        var next = state
+        do {
+            try next.setBrowser(id, enabled: request.enabled ?? false)
+            if next != state { try Storage.save(next, to: Paths.stateFile) }
+        } catch {
+            return .failure("\(error)")
+        }
+        guard next != state else { return Response(ok: true, state: state, quitBrowsers: []) }
+        state = next
+        log("\(id): enforcement \(request.enabled == true ? "on" : "off")")
+        var quitIDs: [String] = []
+        if request.enabled == true {
+            quitIDs = enforce(now: now, changed: true, only: id)
+        } else {
+            enforce(now: now, changed: false, only: id)
+            quitIDs = quit([id])
+        }
+        return Response(ok: true, state: state, quitBrowsers: quitIDs)
     }
 
     private func setup(_ newPassword: String) -> Response {

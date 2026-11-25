@@ -2,7 +2,7 @@ import Foundation
 
 /// Version of the app and the daemon (kept equal to CFBundleShortVersionString in Resources/Info.plist).
 public enum SiteLockVersion {
-    public static let current = "1.2.0"
+    public static let current = "1.3.0"
 
     /// True if `candidate` (e.g. "1.10.0" or "v1.10.0") is a later version than `base`.
     /// Compares dot-separated numbers; missing parts count as 0.
@@ -43,6 +43,7 @@ public struct Request: Codable, Equatable, Sendable {
         case add, remove, unblock, reblock
         case uninstall      // remove the service, policy keys and data (asked from the app)
         case changePassword // `password` is the current one, `newPassword` replaces it
+        case setBrowser     // turn enforcement in `browser` (bundle id) on or off (`enabled`)
     }
 
     public var command: Command
@@ -50,6 +51,9 @@ public struct Request: Codable, Equatable, Sendable {
     public var domain: String?
     /// Only for `edit`: the replacement for `domain`.
     public var newDomain: String? = nil
+    /// Only for `setBrowser`.
+    public var browser: String? = nil
+    public var enabled: Bool? = nil
     public var minutes: Int?
     public var newPassword: String?
 
@@ -68,19 +72,19 @@ public struct Response: Codable, Equatable, Sendable {
     public var error: String?
     public var initialized: Bool?
     public var state: BlockState?
-    /// True when the request changed what Firefox blocks, so the daemon quit Firefox
-    /// (policies are only read at Firefox startup). The app may then relaunch it.
-    public var firefoxQuit: Bool?
+    /// Bundle ids of the browsers the daemon quit to apply the change (policies are only read
+    /// at browser startup). The app may relaunch them.
+    public var quitBrowsers: [String]? = nil
     /// The daemon's version, sent with `hello` (nil from daemons older than 1.1.0).
     public var version: String? = nil
 
     public init(ok: Bool, error: String? = nil, initialized: Bool? = nil, state: BlockState? = nil,
-                firefoxQuit: Bool? = nil) {
+                quitBrowsers: [String]? = nil) {
         self.ok = ok
         self.error = error
         self.initialized = initialized
         self.state = state
-        self.firefoxQuit = firefoxQuit
+        self.quitBrowsers = quitBrowsers
     }
 
     public static func failure(_ message: String) -> Response { Response(ok: false, error: message) }

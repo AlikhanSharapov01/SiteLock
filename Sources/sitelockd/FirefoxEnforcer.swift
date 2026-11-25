@@ -7,14 +7,25 @@ import SiteLockCore
 final class FirefoxEnforcer: Enforcer {
     private let domain = FirefoxPolicy.preferencesDomain as CFString
 
-    func enforce(_ state: BlockState, now: Date, changed: Bool) {
+    let bundleID = Browser.firefoxID
+    private let writeFailure = FailureLog()
+
+    func enforce(_ state: BlockState, now: Date, changed: Bool) -> [String] {
+        guard state.browsers.contains(bundleID) else {
+            // Not enforcing here: make sure none of our keys are left behind.
+            let file = readFile() ?? [:]
+            if FirefoxPolicy.managedKeys.contains(where: { file[$0] != nil }) || !readPreferences().isEmpty {
+                clear()
+            }
+            return []
+        }
         let policy = FirefoxPolicy(blockedDomains: state.effectiveBlocked(now: now))
         if !policy.isSatisfied(by: readFile()) || !policy.isSatisfied(by: readPreferences()) {
             if !changed { log("Firefox policy missing or modified; re-applying") }
             write(policy)
         }
         // Firefox reads WebsiteFilter only at startup, so a new list needs a Firefox restart.
-        if changed { FirefoxProcess.quitAll() }
+        return changed ? [bundleID] : []
     }
 
     /// Removes the keys SiteLock manages (used by uninstall).
@@ -23,6 +34,27 @@ final class FirefoxEnforcer: Enforcer {
             CFPreferencesSetValue(key as CFString, nil, domain, kCFPreferencesAnyUser, kCFPreferencesAnyHost)
         }
         CFPreferencesSynchronize(domain, kCFPreferencesAnyUser, kCFPreferencesAnyHost)
+
+        // cfprefsd can skip the removal when its cache disagrees with the file; edit the file directly.
+        guard var current = readFile(), FirefoxPolicy.managedKeys.contains(where: { current[$0] != nil }) else { return }
+        for key in FirefoxPolicy.managedKeys { current[key] = nil }
+        if current.isEmpty {
+            try? FileManager.default.removeItem(atPath: FirefoxPolicy.plistPath)
+        } else {
+            saveFile(current)
+        }
+    }
+
+    private func saveFile(_ values: [String: Any]) {
+        do {
+            let data = try PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0)
+            try data.write(to: URL(fileURLWithPath: FirefoxPolicy.plistPath), options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0, .groupOwnerAccountID: 0],
+                                                  ofItemAtPath: FirefoxPolicy.plistPath)
+            writeFailure.succeeded()
+        } catch {
+            writeFailure.failed("writing \(FirefoxPolicy.plistPath) failed: \(error)")
+        }
     }
 
     private func readFile() -> [String: Any]? {
@@ -48,7 +80,7 @@ final class FirefoxEnforcer: Enforcer {
             CFPreferencesSetValue(key as CFString, value as AnyObject, domain, kCFPreferencesAnyUser, kCFPreferencesAnyHost)
         }
         if !CFPreferencesSynchronize(domain, kCFPreferencesAnyUser, kCFPreferencesAnyHost) {
-            log("CFPreferencesSynchronize failed")
+            writeFailure.failed("CFPreferencesSynchronize failed")
         }
         guard !policy.isSatisfied(by: readFile()) else { return }
 
@@ -56,27 +88,25 @@ final class FirefoxEnforcer: Enforcer {
         // deleted or replaced behind its back. Write the file directly, keeping foreign keys.
         var merged = readFile() ?? [:]
         for (key, value) in policy.values { merged[key] = value }
-        do {
-            let data = try PropertyListSerialization.data(fromPropertyList: merged, format: .binary, options: 0)
-            try data.write(to: URL(fileURLWithPath: FirefoxPolicy.plistPath), options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0, .groupOwnerAccountID: 0],
-                                                  ofItemAtPath: FirefoxPolicy.plistPath)
-        } catch {
-            log("writing \(FirefoxPolicy.plistPath) failed: \(error)")
-        }
+        saveFile(merged)
     }
 }
 
-enum FirefoxProcess {
-    /// Sends SIGTERM to every Firefox main process (all users), waits up to 10 s, then SIGKILLs
-    /// leftovers. Firefox restores the session on next launch per the user's Firefox settings.
-    static func quitAll() {
-        guard runTool("/usr/bin/pkill", ["-TERM", "-x", "firefox"]) == 0 else { return } // 1 = none running
-        log("quit Firefox so it reloads the policy")
+enum BrowserProcess {
+    /// Sends SIGTERM to every main process of the given browsers (all users) at once, waits up to
+    /// 10 s in total, then SIGKILLs leftovers. Returns the process names that were running.
+    /// The browsers restore their session on next launch per the user's settings.
+    static func quit(processNames: [String]) -> [String] {
+        let running = processNames.filter { runTool("/usr/bin/pkill", ["-TERM", "-x", $0]) == 0 } // 1 = none running
+        guard !running.isEmpty else { return [] }
+        log("quit \(running.joined(separator: ", ")) so they reload the policy")
+        var left = running
         for _ in 0..<20 {
-            if runTool("/usr/bin/pgrep", ["-x", "firefox"]) != 0 { return }
+            left = left.filter { runTool("/usr/bin/pgrep", ["-x", $0]) == 0 }
+            if left.isEmpty { return running }
             Thread.sleep(forTimeInterval: 0.5)
         }
-        _ = runTool("/usr/bin/pkill", ["-KILL", "-x", "firefox"])
+        for name in left { _ = runTool("/usr/bin/pkill", ["-KILL", "-x", name]) }
+        return running
     }
 }

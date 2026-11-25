@@ -66,10 +66,13 @@ enum Installer {
         _ = waitUntil(seconds: 5) { runTool("/bin/launchctl", ["print", target]) != 0 }
     }
 
-    /// Removes SiteLock's Firefox policy keys, the helper, the plist and all data.
+    /// Removes SiteLock's policy keys in every catalog browser, the helper, the plist and all data.
     /// The caller stops the service (before, or after when the service removes itself).
     static func removeFiles() {
         FirefoxEnforcer().clear()
+        for browser in Browser.catalog {
+            if case .chromium = browser.engine { ChromiumEnforcer(browser: browser).clear() }
+        }
         let fm = FileManager.default
         for path in [Paths.launchDaemonPlist, Paths.helper, Paths.socket, Paths.dataDirectory, legacyLogFile] {
             try? fm.removeItem(atPath: path)
