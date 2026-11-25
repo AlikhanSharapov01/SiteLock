@@ -17,7 +17,7 @@ report. Workers return conclusions with `file:line`, not file dumps.
   Firefox source tree; it flags anything it could not confirm.
 - The implementer does not change tests to make them pass; a failing test goes back to the
   orchestrator.
-- The reviewer gets the spec (README "How it works" + the user's requirements), not the
+- The reviewer gets the spec (README + the user's requirements), not the
   implementer's reasoning. It checks the result against the spec, runs the tests, and reports.
 - Nobody commits to `main`, opens or merges PRs, or runs `sitelockd install` / `uninstall` / anything
   that changes system state on the user's Mac. Commits happen on feature branches, without any

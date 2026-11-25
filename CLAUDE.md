@@ -16,6 +16,7 @@ Universal binaries (arm64 + x86_64), ad-hoc signed.
 - Test: `swift test`
 - Test the core on Linux: `docker run --rm -v "$PWD":/src -w /src swift:6.0-noble swift test --build-path /tmp/b`
 - CI: `.github/workflows/macos.yml` (manual `workflow_dispatch`, pull requests, `v*` tags → GitHub release with `SiteLock.zip`)
+- Release: same version in `SiteLockVersion.current` (`Sources/SiteLockCore/IPC.swift`) and `Resources/Info.plist`, merge, push tag `vX.Y.Z`
 - Install / uninstall: `sudo …/sitelockd install`, `sudo /Library/PrivilegedHelperTools/sitelockd uninstall` — the user runs these, never an agent
 
 ## Layout
