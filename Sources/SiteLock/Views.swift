@@ -18,10 +18,54 @@ struct ContentView: View {
                 UnlockView()
             case .unlocked:
                 BlocklistView()
+            case .removed:
+                RemovedView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .safeAreaInset(edge: .top) {
+            if model.updateAvailable && model.screen != .removed { UpdateBanner() }
+        }
+        .confirmationDialog("Uninstall SiteLock?", isPresented: $model.confirmingUninstall) {
+            Button("Uninstall", role: .destructive) { Task { await model.uninstall() } }
+        } message: {
+            Text("This removes the background service, the blocklist and your SiteLock password. Firefox stops blocking after it restarts.")
+        }
         .task { await model.connect() }
+    }
+}
+
+/// Shown when the running service is a different version than the one inside this app.
+struct UpdateBanner: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack {
+            Text("The installed service is \(model.installedVersion.map { "version \($0)" } ?? "an older version"); this app has \(SiteLockVersion.current).")
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button("Update") { Task { await model.install() } }
+                .disabled(model.busy)
+        }
+        .padding(10)
+        .background(Color.accentColor.opacity(0.12))
+    }
+}
+
+struct RemovedView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            AppIconView()
+            Text("SiteLock was removed")
+                .font(.title2)
+            Text("Restart Firefox so it stops blocking. You can now move SiteLock.app to the Trash.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            Button("Quit") { NSApplication.shared.terminate(nil) }
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding()
     }
 }
 
@@ -55,19 +99,22 @@ struct UnreachableView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text("SiteLock is not running")
+            AppIconView()
+            Text("SiteLock is not installed")
                 .font(.title2)
-            Text("The background service could not be reached. Install it in Terminal with `sudo /Applications/SiteLock.app/Contents/MacOS/sitelockd install`, then try again.")
+            Text("Install the background service that blocks sites in Firefox. macOS asks for an administrator password once.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Text(reason)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button("Retry") { Task { await model.connect() } }
-                .keyboardShortcut(.defaultAction)
+            ErrorText(message: model.error)
+            HStack {
+                Button("Retry") { Task { await model.connect() } }
+                Button("Install") { Task { await model.install() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(model.busy)
+            }
         }
         .padding()
     }

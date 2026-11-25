@@ -26,6 +26,7 @@ public struct Request: Codable, Equatable, Sendable {
         case list       // -> domains + unblocks
         case edit           // rename `domain` to `newDomain`
         case add, remove, unblock, reblock
+        case uninstall      // remove the service, policy keys and data (asked from the app)
         case changePassword // `password` is the current one, `newPassword` replaces it
     }
 
@@ -55,6 +56,8 @@ public struct Response: Codable, Equatable, Sendable {
     /// True when the request changed what Firefox blocks, so the daemon quit Firefox
     /// (policies are only read at Firefox startup). The app may then relaunch it.
     public var firefoxQuit: Bool?
+    /// The daemon's version, sent with `hello` (nil from daemons older than 1.1.0).
+    public var version: String? = nil
 
     public init(ok: Bool, error: String? = nil, initialized: Bool? = nil, state: BlockState? = nil,
                 firefoxQuit: Bool? = nil) {

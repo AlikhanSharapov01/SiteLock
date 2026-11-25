@@ -10,6 +10,7 @@ final class AppModel: ObservableObject {
         case setup
         case locked
         case unlocked
+        case removed
     }
 
     static let firefoxBundleID = "org.mozilla.firefox"
@@ -18,6 +19,10 @@ final class AppModel: ObservableObject {
     @Published var state = BlockState()
     @Published var error: String?
     @Published var busy = false
+    /// Version of the running service when it differs from this app's (nil: same, or unknown).
+    @Published var installedVersion: String?
+    @Published var updateAvailable = false
+    @Published var confirmingUninstall = false
 
     /// Kept in memory only while unlocked; every daemon request is authenticated with it.
     private var password = ""
@@ -27,6 +32,8 @@ final class AppModel: ObservableObject {
         error = nil
         do {
             let response = try await send(Request(.hello))
+            installedVersion = response.version
+            updateAvailable = response.version != SiteLockVersion.current
             screen = response.initialized == true ? .locked : .setup
         } catch {
             screen = .unreachable("\(error)")
@@ -56,6 +63,36 @@ final class AppModel: ObservableObject {
         }
         password = newPassword
         return true
+    }
+
+    /// Installs or updates the service from the sitelockd inside this app. macOS shows its
+    /// administrator password dialog; the app is blocked while it is open.
+    func install() async {
+        guard let helper = Bundle.main.url(forAuxiliaryExecutable: "sitelockd")?.path else {
+            error = "sitelockd is missing from SiteLock.app"
+            return
+        }
+        error = nil
+        let command = "'" + helper.replacingOccurrences(of: "'", with: "'\\''") + "' install"
+        let escaped = command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        var info: NSDictionary?
+        let result = NSAppleScript(source: "do shell script \"\(escaped)\" with administrator privileges")?
+            .executeAndReturnError(&info)
+        if result == nil {
+            if (info?[NSAppleScript.errorNumber] as? Int) == -128 { return } // Cancel in the password dialog
+            error = info?[NSAppleScript.errorMessage] as? String ?? "Installation failed"
+            return
+        }
+        await connect()
+    }
+
+    /// Removes SiteLock from this Mac (service, Firefox policy keys, password, list).
+    func uninstall() async {
+        guard await perform(Request(.uninstall, password: password)) != nil else { return }
+        password = ""
+        state = BlockState()
+        updateAvailable = false
+        screen = .removed
     }
 
     func lock() {
