@@ -85,6 +85,15 @@ public final class SiteLockService {
                 return .failure("Only an administrator of this Mac can set the SiteLock password.")
             }
             return setup(request.password ?? "")
+        case .status:
+            var response = Response(ok: true, initialized: password != nil || passwordUnreadable)
+            response.status = Status(
+                domainCount: state.domains.count, browsers: state.browsers,
+                unblocks: state.unblocks.filter { $0.value > now },
+                initialized: password != nil || passwordUnreadable)
+            return response
+        case .reblockNow:
+            return reblockNow(request.domain ?? "", now: now)
         default:
             break
         }
@@ -102,7 +111,7 @@ public final class SiteLockService {
         do {
             let domain = { try Domain.normalize(request.domain ?? "") }
             switch request.command {
-            case .list, .hello, .setup, .changePassword, .uninstall, .setBrowser, .importDomains: break
+            case .list, .hello, .setup, .changePassword, .uninstall, .setBrowser, .importDomains, .status, .reblockNow: break
             case .add: try next.add(domain())
             case .remove: try next.remove(domain())
             case .unblock: try next.unblock(domain(), minutes: request.minutes ?? 0, now: now)
@@ -121,6 +130,23 @@ public final class SiteLockService {
             quitIDs = enforce(true, nil)
         }
         return Response(ok: true, state: state, quitBrowsers: quitIDs)
+    }
+
+    /// No password needed: ending an unblock early only tightens blocking. The response carries
+    /// no list, since the caller is not authenticated.
+    private func reblockNow(_ rawDomain: String, now: Date) -> Response {
+        var next = state
+        do {
+            let domain = try Domain.normalize(rawDomain)
+            guard next.isTemporarilyUnblocked(domain, now: now) else { throw BlockStateError.notUnblocked(domain) }
+            try next.reblock(domain)
+            try saveState(next)
+        } catch {
+            return .failure("\(error)")
+        }
+        state = next
+        log("reblockNow \(rawDomain): applying new list")
+        return Response(ok: true, quitBrowsers: enforce(true, nil))
     }
 
     /// The caller is authenticated. Adds all entries in one change: one save, one enforcement pass.
