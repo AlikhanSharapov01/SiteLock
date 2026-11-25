@@ -6,9 +6,9 @@ report. Workers return conclusions with `file:line`, not file dumps.
 
 | Role | Definition | Model | Owns / may modify | Hands back |
 |---|---|---|---|---|
-| Orchestrator | (main session) | strongest available | plan, integration, `README.md`, `AGENTS.md`, `CLAUDE.md`, `HANDOFF.md` | report to the user |
+| Orchestrator | (main session) | strongest available | plan, integration, `README.md`, `AGENTS.md`, `CLAUDE.md` | report to the user |
 | Researcher | `.claude/agents/researcher.md` | haiku | nothing (read-only) | facts with source URLs; what could not be confirmed |
-| Implementer | `.claude/agents/implementer.md` | sonnet | `Sources/`, `Resources/`, `scripts/`, `install.sh`, `uninstall.sh`, `Package.swift` | list of changed files + what changed + build/test output |
+| Implementer | `.claude/agents/implementer.md` | sonnet | `Sources/`, `Resources/`, `scripts/`, `Package.swift` | list of changed files + what changed + build/test output |
 | Reviewer | `.claude/agents/reviewer.md` | sonnet | `Tests/` only (may add tests) | findings ranked by severity with `file:line`; test results |
 
 ## Boundaries
@@ -19,7 +19,7 @@ report. Workers return conclusions with `file:line`, not file dumps.
   orchestrator.
 - The reviewer gets the spec (README "How it works" + the user's requirements), not the
   implementer's reasoning. It checks the result against the spec, runs the tests, and reports.
-- Nobody commits to `main`, opens or merges PRs, or runs `install.sh` / `uninstall.sh` / anything
+- Nobody commits to `main`, opens or merges PRs, or runs `sitelockd install` / `uninstall` / anything
   that changes system state on the user's Mac. Commits happen on feature branches, without any
   AI attribution.
 

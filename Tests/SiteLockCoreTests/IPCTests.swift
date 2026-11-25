@@ -19,3 +19,14 @@ final class IPCTests: XCTestCase {
         XCTAssertNil(decoded.newPassword)
     }
 }
+
+final class VersionTests: XCTestCase {
+    /// The app bundle's version and the daemon's version must not drift apart.
+    func testInfoPlistVersionMatchesCode() throws {
+        let plist = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Resources/Info.plist")
+        let info = try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as? [String: Any])
+        XCTAssertEqual(info["CFBundleShortVersionString"] as? String, SiteLockVersion.current)
+    }
+}

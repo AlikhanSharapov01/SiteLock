@@ -71,24 +71,12 @@ enum FirefoxProcess {
     /// Sends SIGTERM to every Firefox main process (all users), waits up to 10 s, then SIGKILLs
     /// leftovers. Firefox restores the session on next launch per the user's Firefox settings.
     static func quitAll() {
-        guard run("/usr/bin/pkill", ["-TERM", "-x", "firefox"]) == 0 else { return } // 1 = none running
+        guard runTool("/usr/bin/pkill", ["-TERM", "-x", "firefox"]) == 0 else { return } // 1 = none running
         log("quit Firefox so it reloads the policy")
         for _ in 0..<20 {
-            if run("/usr/bin/pgrep", ["-x", "firefox"]) != 0 { return }
+            if runTool("/usr/bin/pgrep", ["-x", "firefox"]) != 0 { return }
             Thread.sleep(forTimeInterval: 0.5)
         }
-        _ = run("/usr/bin/pkill", ["-KILL", "-x", "firefox"])
-    }
-
-    @discardableResult
-    private static func run(_ tool: String, _ args: [String]) -> Int32 {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: tool)
-        p.arguments = args
-        p.standardOutput = FileHandle.nullDevice
-        p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { log("\(tool) failed: \(error)"); return -1 }
-        p.waitUntilExit()
-        return p.terminationStatus
+        _ = runTool("/usr/bin/pkill", ["-KILL", "-x", "firefox"])
     }
 }
