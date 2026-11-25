@@ -28,6 +28,10 @@ final class AppModel: ObservableObject {
     @Published var updateCheck: UpdateCheck = .idle
     /// Last answer to the password-free `status` request; nil when the service cannot be reached.
     @Published var status: Status?
+    /// False when the last refresh could not reach the service.
+    @Published var reachable = true
+    /// The service answers but is older than this app.
+    @Published var serviceOutdated = false
     @Published var launchAtLoginError: String?
 
     enum UpdateCheck: Equatable {
@@ -42,18 +46,37 @@ final class AppModel: ObservableObject {
     /// Kept in memory only while unlocked; every daemon request is authenticated with it.
     private var password = ""
 
+    private var refreshTask: Task<Void, Never>?
+
     init() {
-        Task { [weak self] in
+        refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refreshStatus()
+                guard let self else { break }
+                await self.refreshStatus()
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
             }
         }
     }
 
-    /// Cheap and unauthenticated; feeds the menu bar item.
+    deinit { refreshTask?.cancel() }
+
+    /// Cheap and unauthenticated; feeds the menu bar item. A failed refresh keeps the last good status.
     func refreshStatus() async {
-        status = try? await send(Request(.status)).status
+        do {
+            if let fresh = try await send(Request(.status)).status {
+                status = fresh
+                reachable = true
+                serviceOutdated = false
+                return
+            }
+        } catch {}
+        // A daemon older than 1.4.0 does not know `status`: tell it apart from an unreachable one.
+        if let hello = try? await send(Request(.hello)) {
+            reachable = true
+            serviceOutdated = SiteLockVersion.isNewer(SiteLockVersion.current, than: hello.version ?? "0")
+        } else {
+            reachable = false
+        }
     }
 
     /// Ends a temporary unblock from the menu bar (no password needed), reopening browsers the daemon quit.
@@ -65,6 +88,7 @@ final class AppModel: ObservableObject {
     }
 
     func connect() async {
+        password = ""
         screen = .connecting
         error = nil
         do {
