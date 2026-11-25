@@ -71,6 +71,29 @@ final class BlockStateTests: XCTestCase {
         XCTAssertThrowsError(try s.reblock("a.com")) { XCTAssertEqual($0 as? BlockStateError, .notUnblocked("a.com")) }
     }
 
+    func testRenameReplacesEntryAndKeepsListSorted() throws {
+        var s = BlockState(domains: ["a.com", "m.com", "z.com"])
+        try s.rename("z.com", to: "b.com")
+        XCTAssertEqual(s.domains, ["a.com", "b.com", "m.com"])
+        XCTAssertNoThrow(try s.rename("a.com", to: "a.com"), "unchanged name is a no-op")
+        XCTAssertEqual(s.domains, ["a.com", "b.com", "m.com"])
+    }
+
+    func testRenameRejectsMissingOldAndDuplicateNew() {
+        var s = BlockState(domains: ["a.com", "b.com"])
+        XCTAssertThrowsError(try s.rename("x.com", to: "y.com")) { XCTAssertEqual($0 as? BlockStateError, .notInList("x.com")) }
+        XCTAssertThrowsError(try s.rename("a.com", to: "b.com")) { XCTAssertEqual($0 as? BlockStateError, .alreadyBlocked("b.com")) }
+        XCTAssertEqual(s.domains, ["a.com", "b.com"], "a failed edit changes nothing")
+    }
+
+    func testRenamedEntryStartsBlocked() throws {
+        var s = BlockState(domains: ["youtube.com"])
+        try s.unblock("youtube.com", minutes: 30, now: t0)
+        try s.rename("youtube.com", to: "www.youtube.com")
+        XCTAssertTrue(s.unblocks.isEmpty)
+        XCTAssertEqual(s.effectiveBlocked(now: t0), ["www.youtube.com"])
+    }
+
     func testRemovingDomainClearsItsUnblock() throws {
         var s = BlockState(domains: ["a.com"])
         try s.unblock("a.com", minutes: 30, now: t0)
@@ -103,5 +126,16 @@ final class AuthThrottleTests: XCTestCase {
         th.record(success: true, now: t0)
         th.record(success: false, now: t0)
         XCTAssertNil(th.lockedFor(now: t0))
+    }
+}
+
+final class EditRequestTests: XCTestCase {
+    func testEditRequestCarriesNewDomain() throws {
+        var request = Request(.edit, password: "p", domain: "youtube.com")
+        request.newDomain = "www.youtube.com"
+        let decoded = try Wire.decode(Request.self, from: Wire.encode(request).dropLast())
+        XCTAssertEqual(decoded.command, .edit)
+        XCTAssertEqual(decoded.newDomain, "www.youtube.com")
+        XCTAssertNil(try Wire.decode(Request.self, from: Data(#"{"command":"list"}"#.utf8)).newDomain)
     }
 }

@@ -108,6 +108,7 @@ final class Daemon {
             case .remove: try next.remove(domain())
             case .unblock: try next.unblock(domain(), minutes: request.minutes ?? 0, now: now)
             case .reblock: try next.reblock(domain())
+            case .edit: try next.rename(domain(), to: Domain.normalize(request.newDomain ?? ""))
             }
             if next != state { try Storage.save(next, to: Paths.stateFile) }
         } catch {

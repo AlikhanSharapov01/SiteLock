@@ -77,6 +77,13 @@ final class AppModel: ObservableObject {
         _ = await change(Request(.unblock, password: password, domain: domain, minutes: minutes))
     }
 
+    /// True when the daemon accepted the edit.
+    func edit(_ domain: String, to newDomain: String) async -> Bool {
+        var request = Request(.edit, password: password, domain: domain)
+        request.newDomain = newDomain
+        return await change(request)
+    }
+
     func reblock(_ domain: String) async {
         _ = await change(Request(.reblock, password: password, domain: domain))
     }

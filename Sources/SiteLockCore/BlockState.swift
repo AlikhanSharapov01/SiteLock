@@ -58,6 +58,17 @@ public struct BlockState: Codable, Equatable, Sendable {
         guard unblocks.removeValue(forKey: domain) != nil else { throw BlockStateError.notUnblocked(domain) }
     }
 
+    /// Replaces `old` with `new` (an edit in the list). The edited entry starts blocked: any
+    /// temporary unblock of `old` is dropped, because the edit changes what is blocked.
+    public mutating func rename(_ old: String, to new: String) throws {
+        guard let i = domains.firstIndex(of: old) else { throw BlockStateError.notInList(old) }
+        guard new != old else { return }
+        guard !domains.contains(new) else { throw BlockStateError.alreadyBlocked(new) }
+        domains[i] = new
+        domains.sort()
+        unblocks[old] = nil
+    }
+
     /// Drops unblocks whose expiry is at or before `now`. Returns true if any were dropped.
     @discardableResult
     public mutating func pruneExpired(now: Date) -> Bool {
