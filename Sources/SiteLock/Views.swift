@@ -343,6 +343,7 @@ struct BlocklistView: View {
                         .disabled(model.busy)
                     Button("Export List…") { model.exportList() }
                     Button("Change Password…") { changingPassword = true }
+                    Button("Report a Problem…") { model.reportProblem() }
                     Divider()
                     Button("Uninstall SiteLock…") { model.showingUninstall = true }
                 } label: {

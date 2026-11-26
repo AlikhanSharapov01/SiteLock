@@ -1,0 +1,61 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched existing issues
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: SiteLock version
+      placeholder: "1.4.0 — SiteLock → About, or `/Library/PrivilegedHelperTools/sitelockd version`"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "14.5"
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Firefox
+        - Google Chrome
+        - Microsoft Edge
+        - Brave
+        - Vivaldi
+        - Chromium
+        - Other / not browser-related
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Run this in Terminal and paste the output. Remove anything private (sites, names) first.
+        `log show --last 30m --predicate 'subsystem == "local.sitelock"'`
+      render: shell
