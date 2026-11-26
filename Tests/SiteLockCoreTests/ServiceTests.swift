@@ -273,7 +273,7 @@ final class ServiceTests: XCTestCase {
         XCTAssertFalse(h.enforceCalls[1].changed)
         XCTAssertEqual(h.enforceCalls[1].only, chrome)
 
-        XCTAssertFalse(setBrowser(h, "com.apple.Safari", enabled: true).ok)
+        XCTAssertFalse(setBrowser(h, "com.operasoftware.Opera", enabled: true).ok)
         XCTAssertEqual(h.enforceCalls.count, 2)
     }
 

@@ -40,6 +40,7 @@ case "run":
     for browser in Browser.catalog {
         if case .chromium = browser.engine { enforcers.append(ChromiumEnforcer(browser: browser)) }
     }
+    enforcers.append(HostsEnforcer())
     let daemon = Daemon(enforcers: enforcers)
     do { try daemon.start() } catch { log("failed to start: \(error)"); exit(1) }
     dispatchMain()

@@ -73,6 +73,7 @@ enum Installer {
         for browser in Browser.catalog {
             if case .chromium = browser.engine { ChromiumEnforcer(browser: browser).clear() }
         }
+        HostsEnforcer().clear()
         let fm = FileManager.default
         for path in [Paths.launchDaemonPlist, Paths.helper, Paths.socket, Paths.dataDirectory, legacyLogFile] {
             try? fm.removeItem(atPath: path)

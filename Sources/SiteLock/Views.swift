@@ -398,6 +398,12 @@ struct BrowsersSheet: View {
                         get: { model.state.browsers.contains(browser.id) },
                         set: { enabled in Task { await model.setBrowser(browser.id, enabled: enabled) } }))
                         .disabled(model.busy)
+                    if case .hostsFile = browser.engine {
+                        Text("Apple gives Safari no way to block sites without device management, so SiteLock blocks your list in /etc/hosts instead. That applies to the whole Mac — every browser and app — and covers each site plus its www. and m. addresses only; other subdomains stay open. iCloud Private Relay bypasses it, so turn Private Relay off for this to work.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 } else {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(browser.name)
