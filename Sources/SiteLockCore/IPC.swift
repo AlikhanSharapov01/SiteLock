@@ -2,7 +2,7 @@ import Foundation
 
 /// Version of the app and the daemon (kept equal to CFBundleShortVersionString in Resources/Info.plist).
 public enum SiteLockVersion {
-    public static let current = "1.4.1"
+    public static let current = "1.5.0"
 
     /// True if `candidate` (e.g. "1.10.0" or "v1.10.0") is a later version than `base`.
     /// Compares dot-separated numbers; missing parts count as 0.

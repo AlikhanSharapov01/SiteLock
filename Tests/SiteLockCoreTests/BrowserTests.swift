@@ -9,7 +9,9 @@ final class BrowserTests: XCTestCase {
         XCTAssertEqual(Browser.byID("com.google.Chrome")?.processName, "Google Chrome")
         XCTAssertNil(Browser.byID("nope"))
         XCTAssertTrue(Browser.byID("com.google.Chrome")!.isSupported)
-        XCTAssertFalse(Browser.byID("com.apple.Safari")!.isSupported)
+        XCTAssertTrue(Browser.byID("com.apple.Safari")!.isSupported)
+        XCTAssertFalse(Browser.byID("com.operasoftware.Opera")!.isSupported)
+        XCTAssertFalse(Browser.byID("company.thebrowser.Browser")!.isSupported)
     }
 
     func testOldStateWithoutBrowsersDefaultsToFirefox() throws {
@@ -42,8 +44,8 @@ final class BrowserTests: XCTestCase {
 
     func testSetBrowserRejectsUnsupportedAndUnknown() {
         var state = BlockState()
-        XCTAssertThrowsError(try state.setBrowser("com.apple.Safari", enabled: true)) {
-            XCTAssertEqual($0 as? BlockStateError, .unsupportedBrowser("com.apple.Safari"))
+        XCTAssertThrowsError(try state.setBrowser("com.operasoftware.Opera", enabled: true)) {
+            XCTAssertEqual($0 as? BlockStateError, .unsupportedBrowser("com.operasoftware.Opera"))
         }
         XCTAssertThrowsError(try state.setBrowser("com.example.Nope", enabled: true))
         XCTAssertEqual(state.browsers, ["org.mozilla.firefox"])

@@ -88,6 +88,33 @@ if echo "$PAGE" | grep -q "Example Domain"; then
 fi
 echo "blocked"
 
+site_reachable() { curl -s --max-time 10 -o /dev/null "$SITE"; }
+hosts_block_has() { # SiteLock block in /etc/hosts contains the given line
+  sed -n '/^# BEGIN SiteLock/,/^# END SiteLock/p' /etc/hosts | grep -qxF "$1"
+}
+
+step "Safari: /etc/hosts block"
+request "{\"command\":\"setBrowser\",\"password\":\"$PASSWORD\",\"browser\":\"com.apple.Safari\",\"enabled\":true}"
+grep -A100 '^# BEGIN SiteLock' /etc/hosts
+hosts_block_has "0.0.0.0 example.com" || fail "/etc/hosts lacks 0.0.0.0 example.com"
+hosts_block_has "0.0.0.0 www.example.com" || fail "/etc/hosts lacks 0.0.0.0 www.example.com"
+if site_reachable; then fail "curl still reaches $SITE with the hosts block in place"; fi
+echo "blocked"
+
+step "Safari: hosts tamper repair"
+sudo sed -i '' '/example\.com/d' /etc/hosts
+! hosts_block_has "0.0.0.0 example.com" || fail "test could not remove the block lines"
+wait_for 10 hosts_block_has "0.0.0.0 example.com" || fail "/etc/hosts block not restored"
+echo "block restored"
+
+step "Safari off removes the block"
+request "{\"command\":\"setBrowser\",\"password\":\"$PASSWORD\",\"browser\":\"com.apple.Safari\",\"enabled\":false}"
+! grep -q 'BEGIN SiteLock' /etc/hosts || fail "/etc/hosts block left after disabling Safari"
+site_reachable || fail "curl cannot reach $SITE after disabling Safari"
+echo "unblocked"
+request "{\"command\":\"setBrowser\",\"password\":\"$PASSWORD\",\"browser\":\"com.apple.Safari\",\"enabled\":true}"
+wait_for 10 hosts_block_has "0.0.0.0 example.com" || fail "/etc/hosts block not written on re-enable"
+
 step "Uninstall needs the password"
 if printf 'wrong-password\n' | sudo "$DAEMON" uninstall; then fail "uninstall accepted a wrong password"; fi
 printf '%s\n' "$PASSWORD" | sudo "$DAEMON" uninstall
@@ -97,6 +124,8 @@ for f in /Library/PrivilegedHelperTools/sitelockd /Library/LaunchDaemons/local.s
   if sudo test -e "$f"; then fail "$f left behind"; fi
 done
 ! sudo plutil -p "$FIREFOX_PLIST" 2>/dev/null | grep -q WebsiteFilter || fail "Firefox policy left behind"
+
+! grep -q 'BEGIN SiteLock' /etc/hosts || fail "/etc/hosts block left behind"
 
 step "Chrome loads $SITE again"
 chrome_page | grep -q "Example Domain" || fail "page still blocked after uninstall"
