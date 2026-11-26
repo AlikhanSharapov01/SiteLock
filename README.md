@@ -30,3 +30,5 @@ Click **Install** in the app and set your SiteLock password. Updates: **Check fo
 **Uninstall SiteLock…** in the app, or `sudo /Library/PrivilegedHelperTools/sitelockd uninstall`.
 
 Anyone with admin rights can remove SiteLock; it is a barrier against impulse, not a lock against yourself.
+
+Found a bug or have an idea? [Open an issue](https://github.com/AlikhanSharapov01/SiteLock/issues/new/choose) · [Contributing](.github/CONTRIBUTING.md)

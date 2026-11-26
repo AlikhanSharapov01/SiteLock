@@ -32,6 +32,7 @@ struct SiteLockApp: App {
             }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { model.showingUpdates = true }
+                Button("Report a Problem…") { model.reportProblem() }
                 Button("Uninstall SiteLock…") { model.showingUninstall = true }
             }
         }

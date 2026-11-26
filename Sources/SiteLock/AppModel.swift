@@ -322,6 +322,17 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Opens the bug report form with the version and macOS version filled in.
+    func reportProblem() {
+        var components = URLComponents(string: "https://github.com/AlikhanSharapov01/SiteLock/issues/new")!
+        components.queryItems = [
+            URLQueryItem(name: "template", value: "bug_report.yml"),
+            URLQueryItem(name: "version", value: SiteLockVersion.current),
+            URLQueryItem(name: "macos", value: ProcessInfo.processInfo.operatingSystemVersionString),
+        ]
+        if let url = components.url { NSWorkspace.shared.open(url) }
+    }
+
     /// Browsers installed on this Mac, plus enabled ones that are gone (so they can be turned off).
     var installedBrowsers: [Browser] {
         Browser.catalog.filter { browser in
