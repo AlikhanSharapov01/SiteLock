@@ -108,4 +108,34 @@ final class HostsPolicyTests: XCTestCase {
         let noEnd = good.replacingOccurrences(of: "\(end)\n", with: "")
         XCTAssertFalse(policy.isSatisfied(by: noEnd))
     }
+
+    func testStrayBeginKeepsForeignLines() {
+        let text = "a\n\(begin)\nforeign\n" + HostsPolicy(blockedDomains: ["x.com"]).blockLines.joined(separator: "\n") + "\nz\n"
+        let stripped = HostsPolicy.strip(text)
+        XCTAssertEqual(stripped, "a\n\(begin)\nforeign\nz\n")
+        let applied = HostsPolicy(blockedDomains: ["x.com"]).apply(to: text)
+        XCTAssertTrue(applied.contains("\nforeign\n"))
+        XCTAssertTrue(applied.hasPrefix("a\n\(begin)\nforeign\n\(begin)\n0.0.0.0 m.x.com"))
+    }
+
+    func testEndWithoutBeginIsKept() {
+        let text = "a\n\(end)\nb\n"
+        XCTAssertEqual(HostsPolicy.strip(text), text)
+        XCTAssertFalse(HostsPolicy.hasBlock(text))
+    }
+
+    func testTrailingNewlineAndCRLFPreserved() {
+        let policy = HostsPolicy(blockedDomains: ["a.com"])
+        let crlf = "127.0.0.1 localhost\r\n10.0.0.1 x\r\n"
+        XCTAssertEqual(HostsPolicy.strip(policy.apply(to: crlf)), crlf)
+        let noNewline = "127.0.0.1 localhost\n\(begin)\n0.0.0.0 a.com\n\(end)"
+        XCTAssertEqual(HostsPolicy.strip(noNewline), "127.0.0.1 localhost")
+        XCTAssertEqual(HostsPolicy.strip("x"), "x")
+        XCTAssertEqual(HostsPolicy(blockedDomains: []).apply(to: "x"), "x")
+    }
+
+    func testInvalidHostsAreDropped() {
+        let policy = HostsPolicy(blockedDomains: ["a.com\n127.0.0.1 evil", "bad host.com", "ok.com"])
+        XCTAssertEqual(policy.hosts, ["m.ok.com", "ok.com", "www.ok.com"])
+    }
 }

@@ -13,7 +13,7 @@ final class HostsEnforcer: Enforcer {
             return []
         }
         let policy = HostsPolicy(blockedDomains: state.effectiveBlocked(now: now))
-        let current = readFile() ?? ""
+        guard let current = readFile() else { return [] }
         if !policy.isSatisfied(by: current) {
             if !changed { log("\(HostsPolicy.path) block missing or modified; re-applying") }
             write(policy.apply(to: current))
@@ -28,16 +28,33 @@ final class HostsEnforcer: Enforcer {
         write(HostsPolicy.strip(current))
     }
 
+    /// The file as text; "" if it does not exist; nil (logged once) if it is not valid UTF-8,
+    /// in which case it is left alone.
     private func readFile() -> String? {
-        guard let data = FileManager.default.contents(atPath: HostsPolicy.path) else { return nil }
-        return String(decoding: data, as: UTF8.self)
+        guard let data = FileManager.default.contents(atPath: HostsPolicy.path) else { return "" }
+        guard let text = String(data: data, encoding: .utf8) else {
+            writeFailure.failed("\(HostsPolicy.path) is not valid UTF-8; leaving it alone")
+            return nil
+        }
+        return text
     }
 
     private func write(_ text: String) {
         do {
-            try Data(text.utf8).write(to: URL(fileURLWithPath: HostsPolicy.path), options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0, .groupOwnerAccountID: 0],
-                                                  ofItemAtPath: HostsPolicy.path)
+            // Temp file in /etc with the final mode and owner, then rename(2) over /etc/hosts, so
+            // the file is never briefly unreadable.
+            let temp = HostsPolicy.path + ".sitelock.tmp"
+            try Data(text.utf8).write(to: URL(fileURLWithPath: temp))
+            do {
+                try FileManager.default.setAttributes([.posixPermissions: 0o644, .ownerAccountID: 0, .groupOwnerAccountID: 0],
+                                                      ofItemAtPath: temp)
+                guard rename(temp, HostsPolicy.path) == 0 else {
+                    throw InstallError(description: String(cString: strerror(errno)))
+                }
+            } catch {
+                try? FileManager.default.removeItem(atPath: temp)
+                throw error
+            }
             writeFailure.succeeded()
             runTool("/usr/bin/dscacheutil", ["-flushcache"])
             runTool("/usr/bin/killall", ["-HUP", "mDNSResponder"])
